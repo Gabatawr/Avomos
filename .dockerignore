@@ -1,0 +1,9 @@
+**/.cache
+**/examples
+**/node_modules
+**/bin
+**/obj
+**/appsettings.Development.json
+**/appsettings.*.local.json
+**/.env
+**/*.log

@@ -1,0 +1,73 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+## NuGet
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nupkg
+**/[Dd]ebug/
+**/[Rr]elease/
+
+## Build results
+[Dd]ebug[Rr]elease/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+## dotnet
+*.dotnetuser
+.vs/
+*.sln.ide/
+
+## JetBrains Rider
+.idea/
+*.sln.iml
+
+## macOS
+.DS_Store
+
+## Visual Studio Code
+.vscode/
+
+## Docker Compose local override (secrets, local config)
+docker-compose.override.yml
+
+## Secrets — local overrides (not the base appsettings.json with placeholders)
+appsettings.*.local.json
+appsettings.Development.json
+
+## Examples (not tracked, local copies)
+examples/
+
+## LLM cache (dev artifacts, not tracked)
+.cache/
+
+## Node.js (Avomos.Ext)
+node_modules/
+dist/
+
+## Environment & secrets (defensive)
+.env
+.env.*.local
+*.secret
+secrets.json
+
+## Logs
+*.log
+logs/
+
+## OS
+Thumbs.db
