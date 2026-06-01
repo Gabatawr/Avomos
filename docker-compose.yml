@@ -5,7 +5,7 @@ services:
       - "6333:6333"
       - "6334:6334"
     volumes:
-      - qdrant_data:/qdrant/storage
+      - ./volumes/qdrant:/qdrant/storage
 
   api:
     build:
@@ -13,10 +13,10 @@ services:
       dockerfile: Dockerfile
     ports:
       - "5000:5000"
+    volumes:
+      - ./volumes/chat:/app/.cache/chat
     environment:
       - QDRANT_HOST=qdrant
+      # ASPNETCORE_ENVIRONMENT, API keys → docker-compose.override.yml (gitignored)
     depends_on:
       - qdrant
-
-volumes:
-  qdrant_data:

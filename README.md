@@ -16,7 +16,10 @@ Avomos/
 │       ├── src/          # React components, store, API client
 │       └── manifest.json
 ├── docker-compose.yml    # Qdrant + API
-└── Dockerfile
+├── docker-compose.override.yml  # Local secrets (gitignored)
+├── Dockerfile
+└── volumes/              # Runtime data (gitignored)
+    └── qdrant/           # Qdrant storage
 ```
 
 ### Stack
@@ -42,39 +45,37 @@ LLM responds via one of four tools (prompt-based JSON):
 ## Quick Start
 
 ```bash
-# 1. Start Qdrant
-docker compose up -d qdrant
+# 1. Create docker-compose.override.yml with your API keys (see Configuration)
+# 2. Start all services
+docker compose up -d
 
-# 2. Set API keys (use appsettings.json or user secrets)
-#    - OpenRouter:ApiKey (embeddings)
-#    - Llm:ApiKey (chat) — any OpenAI-compatible provider
-
-# 3. Run API
-cd src/Avomos.Api && dotnet run
-
-# 4. Build extension
+# 3. Build extension
 cd src/Avomos.Ext && npm run build
 # Load dist/ as unpacked extension in Chrome
 ```
 
 ## Configuration
 
-```json
-{
-  "Llm": {
-    "ApiKey": "your-api-key",
-    "Endpoint": "https://api.deepseek.com",
-    "ChatModelId": "deepseek-v4-flash"
-  },
-  "OpenRouter": {
-    "ApiKey": "your-openrouter-key",
-    "Endpoint": "https://openrouter.ai/api/v1/",
-    "Model": "nvidia/llama-nemotron-embed-vl-1b-v2:free"
-  }
-}
+### API Keys (required)
+
+Create `docker-compose.override.yml` in the project root:
+
+```yaml
+services:
+  api:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - OpenRouter__ApiKey=your-openrouter-key
+      - OpenRouter__Endpoint=https://openrouter.ai/api/v1/
+      - OpenRouter__Model=nvidia/llama-nemotron-embed-vl-1b-v2:free
+      - Llm__ApiKey=your-llm-api-key
+      - Llm__Endpoint=https://api.deepseek.com
+      - Llm__ChatModelId=deepseek-v4-flash
 ```
 
 The `Llm` section supports any OpenAI-compatible API — just change Endpoint and ChatModelId.
+
+> `docker-compose.override.yml` is gitignored and won't be committed.
 
 ## API Endpoints
 
@@ -100,7 +101,8 @@ The extension intercepts Suno's API responses, extracts track metadata, and sync
 ## Notes
 
 - Qdrant gRPC `ScrollAsync()` has a bug (ignores `limit`, returns 10). Use REST `/points/scroll` for scrolling.
-- Embeddings are cached in `.cache/llm/embedding/` to avoid redundant API calls.
+- Embeddings are cached in `.cache/llm/embedding/` inside the container (lost on restart — temporary cache).
+- Chat sessions are persisted in `volumes/chat/` (bind mount, survives restarts).
 - Extension version auto-bumps patch on each `npm run build`.
 
 ## License

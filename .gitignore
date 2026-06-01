@@ -42,6 +42,9 @@ bld/
 ## Visual Studio Code
 .vscode/
 
+## Runtime data (volumes for Docker services)
+volumes/
+
 ## Docker Compose local override (secrets, local config)
 docker-compose.override.yml
 

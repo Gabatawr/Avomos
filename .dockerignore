@@ -3,6 +3,7 @@
 **/node_modules
 **/bin
 **/obj
+**/volumes
 **/appsettings.Development.json
 **/appsettings.*.local.json
 **/.env
