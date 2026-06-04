@@ -1,25 +1,29 @@
-# Avomos v0.3.0
+# Avomos v0.3.4
 
-Chrome extension + backend for parsing and managing metadata from Suno AI song feed.
+Browser extension + backend for parsing and managing metadata from Suno AI song feed.
 
 ## Architecture
 
 ```
 Avomos/
 ├── src/
-│   ├── Avomos.Api/       # ASP.NET Core API (C#)
-│   │   ├── Features/     # MediatR handlers (lyrics CRUD, chat, search)
-│   │   ├── Models/       # Qdrant document model, vectors
-│   │   └── Services/     # Mp3Parser, EmbeddingService, LlmCache
-│   └── Avomos.Ext/       # Chrome MV3 extension (Preact + TypeScript + SCSS)
-│       ├── public/       # Web-accessible resources (page-interceptor.js)
-│       ├── src/          # React components, store, API client
-│       └── manifest.json
-├── docker-compose.yml    # Qdrant + API
+│   ├── Avomos.Api/          # ASP.NET Core API (C#)
+│   │   ├── Features/        # Chat, Riders, Tracks endpoints
+│   │   ├── Models/          # Qdrant document model, vectors
+│   │   └── Services/        # RiderService, EmbeddingService, LlmCache
+│   └── Avomos.Ext/          # MV3 extension (Preact + TypeScript + SCSS)
+│       ├── dist/            # Prebuilt Chrome extension (load unpacked)
+│       ├── public/          # Web-accessible resources (page-interceptor.js)
+│       ├── src/             # Components, store, API client
+│       ├── manifest.json    # Chrome manifest
+│       ├── manifest.firefox.json
+│       └── avomos-firefox.xpi  # Prebuilt Firefox extension
+├── volumes/                 # Runtime data (preserved via .gitkeep)
+│   ├── chat/                # Chat session persistence
+│   └── qdrant/             # Qdrant storage
+├── docker-compose.yml       # Qdrant + API
 ├── docker-compose.override.yml  # Local secrets (gitignored)
-├── Dockerfile
-└── volumes/              # Runtime data (gitignored)
-    └── qdrant/           # Qdrant storage
+└── Dockerfile
 ```
 
 ### Stack
@@ -49,9 +53,20 @@ LLM responds via one of four tools (prompt-based JSON):
 # 2. Start all services
 docker compose up -d
 
-# 3. Build extension
-cd src/Avomos.Ext && npm run build
-# Load dist/ as unpacked extension in Chrome
+# 3. Load the extension
+#
+# Chrome:
+#   chrome://extensions → Load unpacked → select src/Avomos.Ext/dist/
+#
+# Firefox:
+#   about:debugging#/runtime/this-firefox → Load Temporary Add-on → select
+#   src/Avomos.Ext/avomos-firefox.xpi (or manifest.json from dist-firefox/)
+
+# To build from source instead of using prebuilt artifacts:
+cd src/Avomos.Ext
+npm run build          # Chrome + Firefox + .xpi
+npm run build:chrome   # Chrome only → dist/
+npm run build:firefox  # Firefox only → dist-firefox/ + .xpi
 ```
 
 ## Configuration
@@ -64,12 +79,11 @@ Create `docker-compose.override.yml` in the project root:
 services:
   api:
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
       - OpenRouter__ApiKey=your-openrouter-key
       - OpenRouter__Endpoint=https://openrouter.ai/api/v1/
       - OpenRouter__Model=nvidia/llama-nemotron-embed-vl-1b-v2:free
       - Llm__ApiKey=your-llm-api-key
-      - Llm__Endpoint=https://api.deepseek.com
+      - Llm__Endpoint=https://api.deepseek.com/v1/
       - Llm__ChatModelId=deepseek-v4-flash
 ```
 
@@ -105,6 +119,13 @@ The extension intercepts Suno's API responses, extracts track metadata, and sync
 
 ## Changelog
 
+### v0.3.4 — Build artifacts, Firefox support, .gitkeep
+
+- **Firefox support**: `manifest.firefox.json`, `npm run build:firefox`, prebuilt `.xpi` in repo
+- **Chrome + Firefox prebuilt**: `dist/` (Chrome) and `avomos-firefox.xpi` tracked in git — no build needed
+- **`.gitkeep` in volumes/**: directory structure preserved in repo
+- **Cleaner docker-compose**: removed `ASPNETCORE_ENVIRONMENT=Development` (defaults to Production)
+
 ### v0.3.0 — Riders
 
 - **Rider system**: 6 default riders seeded into Qdrant on startup, matching dynamically by style similarity
@@ -121,8 +142,8 @@ The extension intercepts Suno's API responses, extracts track metadata, and sync
 
 - Qdrant gRPC `ScrollAsync()` has a bug (ignores `limit`, returns 10). Use REST `/points/scroll` for scrolling.
 - Embeddings are cached in `.cache/llm/embedding/` inside the container (lost on restart — temporary cache).
-- Chat sessions are persisted in `volumes/chat/` (bind mount, survives restarts).
-- Extension version auto-bumps patch on each `npm run build`.
+- `docker-compose.override.yml` and `appsettings.*.local.json` are gitignored — keep secrets there.
+- Extension version auto-bumps patch on each `npm run build` (via `prebuild` script). Prebuilt artifacts in repo may lag behind source.
 
 ## License
 

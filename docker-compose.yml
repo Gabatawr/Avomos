@@ -17,6 +17,11 @@ services:
       - ./volumes/chat:/app/.cache/chat
     environment:
       - QDRANT_HOST=qdrant
-      # ASPNETCORE_ENVIRONMENT, API keys → docker-compose.override.yml (gitignored)
+      #- OpenRouter__ApiKey=sk-or-v1-
+      - OpenRouter__Endpoint=https://openrouter.ai/api/v1/
+      - OpenRouter__Model=nvidia/llama-nemotron-embed-vl-1b-v2:free
+      #- Llm__ApiKey=sk-
+      - Llm__Endpoint=https://api.deepseek.com/v1/
+      - Llm__ChatModelId=deepseek-v4-flash
     depends_on:
       - qdrant
