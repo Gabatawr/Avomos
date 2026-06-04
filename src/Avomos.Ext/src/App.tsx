@@ -105,10 +105,11 @@ export function App() {
   useEffect(() => { localStorage.setItem('avomos_chat_hidden', chatHidden ? '1' : '0'); }, [chatHidden]);
 
   useEffect(() => {
+    if (panelHidden) return;
     scanDOM();
     const interval = setInterval(scanDOM, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [panelHidden]);
 
   useEffect(() => {
     const handler = (e: Event) => {
