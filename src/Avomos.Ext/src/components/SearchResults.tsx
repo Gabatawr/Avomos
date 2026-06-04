@@ -48,6 +48,7 @@ export const SearchResults = forwardRef<SearchResultsHandle, Props>(({ buffer, o
     const cached = cache.current[key];
     if (cached && Date.now() - cached.time < CACHE_TTL) { setResults(cached.hits); return; }
     const hits = await api.search(q, limitRef.current, weightRef.current);
+    hits.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
     cache.current[key] = { hits, time: Date.now() };
     setResults(hits);
   }, []);
@@ -156,7 +157,7 @@ export const SearchResults = forwardRef<SearchResultsHandle, Props>(({ buffer, o
               <span className={`at-style ${hasStyle ? '' : 'at-style-muted'}`} title={t.styles || ''}>
                 s
               </span>
-              <span className="ac-sr-spacer" />
+              <span className="ac-sr-spacer">{t.score != null ? `${Math.round(t.score * 100)}%` : ''}</span>
               <span
                 className={`at-style ${hasContent ? 'at-style-clickable' : 'at-style-muted'}`}
                   onClick={e => {

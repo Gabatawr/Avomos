@@ -528,7 +528,18 @@
   height: 14px;
 }
 .ac-sr-selected .ac-sr-plus { color: #6b7280; }
-.ac-sr-spacer { width: 100%; }
+.ac-sr-score {
+  font-size: 10px;
+  color: rgba(255,235,190,0.5);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.ac-sr-spacer {
+  font-size: 10px;
+  color: rgba(255,235,190,0.5);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
 
 .ac-buffer {
   flex-shrink: 0;

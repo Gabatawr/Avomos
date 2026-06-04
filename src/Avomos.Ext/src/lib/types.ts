@@ -53,6 +53,7 @@ export interface SearchHit {
   lyrics?: string;
   isPublic?: boolean;
   styles?: string;
+  score?: number;
 }
 
 export interface SessionInfo {
