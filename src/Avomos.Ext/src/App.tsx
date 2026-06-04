@@ -97,9 +97,12 @@ function scanDOM() {
 }
 
 export function App() {
-  const [panelHidden, setPanelHidden] = useState(false);
-  const [chatHidden, setChatHidden] = useState(false);
+  const [panelHidden, setPanelHidden] = useState(() => localStorage.getItem('avomos_panel_hidden') === '1');
+  const [chatHidden, setChatHidden] = useState(() => localStorage.getItem('avomos_chat_hidden') === '1');
   const [detailTrack, setDetailTrack] = useState<Track | null>(null);
+
+  useEffect(() => { localStorage.setItem('avomos_panel_hidden', panelHidden ? '1' : '0'); }, [panelHidden]);
+  useEffect(() => { localStorage.setItem('avomos_chat_hidden', chatHidden ? '1' : '0'); }, [chatHidden]);
 
   useEffect(() => {
     scanDOM();
