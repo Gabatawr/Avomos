@@ -1,4 +1,4 @@
-# Avomos
+# Avomos v0.3.0
 
 Chrome extension + backend for parsing and managing metadata from Suno AI song feed.
 
@@ -87,8 +87,13 @@ The `Llm` section supports any OpenAI-compatible API — just change Endpoint an
 - `DELETE /tracks/{originId}` — delete track
 
 ### Chat
-- `POST /chat` — LLM chat with buffer context (returns reply/simple/advanced/hooks)
+- `POST /chat` — LLM chat with buffer context (returns reply/simple/advanced/hooks), accepts `ridersThreshold`
 - `GET/POST/DELETE /chat/session` — session management
+
+### Riders (v0.3.0)
+- `POST /riders/match` — match top 3 riders by buffer tracks + threshold, returns `canCreate` + `similarity`
+- `POST /riders/create` — create a new rider via LLM (3 default + 3 matched custom riders, fallback to 6 defaults)
+- `DELETE /riders/{id}` — delete a custom rider
 
 ## Data Flow
 
@@ -97,6 +102,20 @@ Suno feed → page-interceptor.js → CustomEvent → TrackStore → API backend
 ```
 
 The extension intercepts Suno's API responses, extracts track metadata, and syncs it with the backend. Qdrant stores lyrics as vectors for semantic search.
+
+## Changelog
+
+### v0.3.0 — Riders
+
+- **Rider system**: 6 default riders seeded into Qdrant on startup, matching dynamically by style similarity
+- **LLM rider creation**: creates/replaces riders from buffer tracks via `POST /riders/create`
+- **Rider deletion**: custom riders can be deleted via hover × in UI
+- **Threshold slider**: configurable similarity threshold (0–1, step 0.05), persisted in localStorage
+- **Track coherence check**: determines if buffer tracks are coherent enough for rider creation
+- **Chat rider injection**: max 3 matched riders injected into LLM prompt context
+- **Debounced rider sync**: 300ms debounce on buffer/threshold changes
+- **Fixed TDZ bug**: useCallback ordering caused "Cannot access Z before initialization"
+- **UI**: all rider controls on one line (names · threshold · +Rider)
 
 ## Notes
 
