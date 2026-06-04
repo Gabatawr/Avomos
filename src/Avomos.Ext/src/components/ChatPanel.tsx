@@ -7,7 +7,8 @@ import { SearchResults } from './SearchResults';
 import type { SearchResultsHandle } from './SearchResults';
 import { BufferList } from './BufferList';
 import { MessageList } from './MessageList';
-import type { BufferItem, ChatMessage, ChatResponse, SessionInfo } from '../lib/types';
+import { RiderDisplay } from './RiderDisplay';
+import type { BufferItem, ChatMessage, ChatResponse, SessionInfo, MatchedRider } from '../lib/types';
 
 interface Props {
   hidden: boolean;
@@ -32,6 +33,13 @@ export function ChatPanel({ hidden, onToggle }: Props) {
   const [sessionId, setSessionId] = useState('');
   const [sessionName, setSessionName] = useState('New Chat');
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [matchedRiders, setMatchedRiders] = useState<MatchedRider[]>([]);
+  const [riderCanCreate, setRiderCanCreate] = useState(false);
+  const [riderLoading, setRiderLoading] = useState(false);
+  const [riderThreshold, setRiderThreshold] = useState(() => {
+    const saved = localStorage.getItem('avomos_rider_threshold');
+    return saved ? parseFloat(saved) : 0.55;
+  });
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -39,24 +47,7 @@ export function ChatPanel({ hidden, onToggle }: Props) {
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
   const searchRef = useRef<SearchResultsHandle>(null);
-
-  useEffect(() => {
-    api.restoreSession().then(data => {
-      if (data) {
-        if (data.sessionId) setSessionId(data.sessionId);
-        if (data.buffer) setBuffer(data.buffer as BufferItem[]);
-        if (data.messages) setMessages(data.messages as ChatMessage[]);
-        if (data.sessionId) {
-          api.loadSessions().then(sd => {
-            if (sd) {
-              const cur = sd.sessions.find(s => s.id === data.sessionId);
-              if (cur) setSessionName(cur.name);
-            }
-          });
-        }
-      }
-    });
-  }, []);
+  const riderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const persistSession = useCallback(async (buf: BufferItem[], msgs: ChatMessage[]) => {
     if (!sessionId) return;
@@ -66,6 +57,43 @@ export function ChatPanel({ hidden, onToggle }: Props) {
       if (cur) setSessionName(cur.name);
     }
   }, [sessionId]);
+
+  const syncRiders = useCallback(async (buf: BufferItem[], thr?: number) => {
+    const ids = buf.map(b => b._originId);
+    if (ids.length < 3) {
+      setMatchedRiders([]);
+      setRiderCanCreate(false);
+      return;
+    }
+    const t = thr ?? riderThreshold;
+    setRiderLoading(true);
+    const matchRes = await api.riderMatch(ids, t);
+    if (matchRes) {
+      setMatchedRiders(matchRes.riders);
+      setRiderCanCreate(matchRes.canCreate);
+    }
+    setRiderLoading(false);
+  }, [riderThreshold]);
+
+  const scheduleRiders = useCallback((buf: BufferItem[], thr: number) => {
+    if (riderTimerRef.current) clearTimeout(riderTimerRef.current);
+    riderTimerRef.current = setTimeout(() => syncRiders(buf, thr), 300);
+  }, [syncRiders]);
+
+  const flushRiders = useCallback((buf: BufferItem[], thr: number) => {
+    if (riderTimerRef.current) clearTimeout(riderTimerRef.current);
+    riderTimerRef.current = null;
+    syncRiders(buf, thr);
+  }, [syncRiders]);
+
+  const handleThresholdChange = useCallback((val: number) => {
+    setRiderThreshold(val);
+    localStorage.setItem('avomos_rider_threshold', String(val));
+    setBuffer(prev => {
+      scheduleRiders(prev, val);
+      return prev;
+    });
+  }, [scheduleRiders]);
 
   const addToBuffer = useCallback((originId: string, title: string, data?: { model?: string; style?: string; plays?: number; lyrics?: string; isPublic?: boolean }) => {
     setBuffer(prev => {
@@ -80,17 +108,19 @@ export function ChatPanel({ hidden, onToggle }: Props) {
       };
       const newBuf = [...prev, item];
       persistSession(newBuf, messagesRef.current);
+      scheduleRiders(newBuf, riderThreshold);
       return newBuf;
     });
-  }, [persistSession]);
+  }, [persistSession, riderThreshold, scheduleRiders]);
 
   const removeFromBuffer = useCallback((originId: string) => {
     setBuffer(prev => {
       const newBuf = prev.filter(b => b._originId !== originId);
       persistSession(newBuf, messagesRef.current);
+      scheduleRiders(newBuf, riderThreshold);
       return newBuf;
     });
-  }, [persistSession]);
+  }, [persistSession, riderThreshold, scheduleRiders]);
 
   const semanticSearch = useCallback((originId: string, title: string) => {
     searchRef.current?.externalSearch(title || originId);
@@ -109,7 +139,7 @@ export function ChatPanel({ hidden, onToggle }: Props) {
     setWaiting(true);
 
     const trackIds = buffer.map(b => b._originId);
-    const data: ChatResponse | null = await api.chat(trackIds, createMode, newMsgs.slice(0, -1));
+    const data: ChatResponse | null = await api.chat(trackIds, createMode, newMsgs.slice(0, -1), riderThreshold);
 
     const finalMsgs = [...newMsgs.slice(0, -1)];
     if (data) {
@@ -127,6 +157,30 @@ export function ChatPanel({ hidden, onToggle }: Props) {
     setWaiting(false);
     persistSession(buffer, finalMsgs);
   }, [inputText, waiting, buffer, createMode, persistSession]);
+
+  useEffect(() => {
+    api.restoreSession().then(data => {
+      if (data) {
+        if (data.sessionId) setSessionId(data.sessionId);
+        if (data.buffer) {
+          const buf = data.buffer as BufferItem[];
+          setBuffer(buf);
+          if (buf.length >= 3) scheduleRiders(buf, riderThreshold);
+        }
+        if (data.messages) setMessages(data.messages as ChatMessage[]);
+        if (data.sessionId) {
+          api.loadSessions().then(sd => {
+            if (sd) {
+              const cur = sd.sessions.find(s => s.id === data.sessionId);
+              if (cur) setSessionName(cur.name);
+            }
+          });
+        }
+      }
+    });
+  }, [scheduleRiders]);
+
+  useEffect(() => () => { if (riderTimerRef.current) clearTimeout(riderTimerRef.current); }, []);
 
   const deleteSession = useCallback(async (id: string) => {
     const res = await api.deleteSession(id);
@@ -265,6 +319,17 @@ export function ChatPanel({ hidden, onToggle }: Props) {
 
           <SearchResults ref={searchRef} buffer={buffer} onAddToBuffer={addToBuffer} chatPanelW={panelW} />
           <BufferList buffer={buffer} onRemove={removeFromBuffer} onSemanticSearch={semanticSearch} chatPanelW={panelW} />
+          <RiderDisplay
+            riders={matchedRiders}
+            canCreate={riderCanCreate}
+            loading={riderLoading}
+            trackIds={buffer.map(b => b._originId)}
+            threshold={riderThreshold}
+            onRidersUpdate={setMatchedRiders}
+            onThresholdChange={handleThresholdChange}
+            onFlushRiders={() => flushRiders(buffer, riderThreshold)}
+            onChatMessage={text => setMessages(prev => [...prev, { role: 'assistant', content: text }])}
+          />
           <MessageList messages={messages} expanded={expanded} onToggleExpand={toggleExpand} onInsert={handleInsert} onHookClick={handleHookClick} />
 
           <div className="ac-input-row">

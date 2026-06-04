@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Avomos.Api.Features.Lyrics;
 using Avomos.Api.Features.Chat;
+using Avomos.Api.Features.Riders;
 using MediatR;
 
 namespace Avomos.Api;
@@ -57,6 +58,7 @@ public static class ApiEndpoints
         });
 
         ChatEndpoint.Map(app);
+        RidersApi.Map(app);
 
         // --- Multi-session API ---
 

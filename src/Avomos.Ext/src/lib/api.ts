@@ -1,6 +1,6 @@
 import { config } from './config';
 import { trackStore } from './track-store';
-import type { ChatMessage, ChatResponse, SearchHit, SessionInfo } from './types';
+import type { ChatMessage, ChatResponse, SearchHit, SessionInfo, MatchResponse, CreateRiderResult } from './types';
 
 function apiUrl(path: string): string {
   return `${config.API_BASE}${path}`;
@@ -94,9 +94,9 @@ export const api = {
     }
   },
 
-  async chat(trackIds: string[], createMode: string, messages: ChatMessage[]): Promise<ChatResponse | null> {
+  async chat(trackIds: string[], createMode: string, messages: ChatMessage[], ridersThreshold?: number): Promise<ChatResponse | null> {
     try {
-      const r = await apiPost('/chat', { trackIds, createMode, messages });
+      const r = await apiPost('/chat', { trackIds, createMode, messages, ridersThreshold });
       if (!r || !r.ok) return null;
       return await r.json();
     } catch {
@@ -138,5 +138,28 @@ export const api = {
     const r = await apiFetch(`/chat/session/${id}`, { method: 'DELETE' });
     if (!r || !r.ok) return null;
     return await r.json();
+  },
+
+  async riderMatch(trackIds: string[], threshold?: number): Promise<MatchResponse | null> {
+    try {
+      const r = await apiPost('/riders/match', { trackIds, threshold });
+      if (!r || !r.ok) return null;
+      return await r.json();
+    } catch { return null; }
+  },
+
+  async riderCreate(trackIds: string[], threshold?: number): Promise<CreateRiderResult | null> {
+    try {
+      const r = await apiPost('/riders/create', { trackIds, threshold });
+      if (!r || !r.ok) return null;
+      return await r.json();
+    } catch { return null; }
+  },
+
+  async riderDelete(id: string): Promise<boolean> {
+    try {
+      const r = await apiFetch(`/riders/${id}`, { method: 'DELETE' });
+      return r !== null && r.ok;
+    } catch { return false; }
   },
 };

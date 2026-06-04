@@ -66,3 +66,30 @@ export interface ChatResponse {
   advanced?: AdvancedData;
   hooks?: string[];
 }
+
+export interface MatchedRider {
+  riderId: string;
+  type: string;
+  name: string;
+  score: number;
+  model: string;
+  tempo: string;
+  weirdness: string;
+  styleInfluence: string;
+  shortStyle: string;
+  detailedStyle: string;
+  exclude: string;
+  lyricsTemplate: string;
+}
+
+export interface MatchResponse {
+  riders: MatchedRider[];
+  canCreate: boolean;
+  similarity: number | null;
+}
+
+export interface CreateRiderResult {
+  riderId: string;
+  status: string;
+  message: string;
+}

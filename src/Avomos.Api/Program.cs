@@ -17,6 +17,8 @@ builder.Services.AddMediatR(cfg =>
 
 builder.Services.AddSingleton<LlmCache>();
 builder.Services.AddSingleton<EmbeddingService>();
+builder.Services.AddSingleton<RiderSeeder>();
+builder.Services.AddSingleton<RiderService>();
 builder.Services.AddSingleton(new QdrantClient(LyricDocument.QdrantHost));
 var qdrantHost = Environment.GetEnvironmentVariable("QDRANT_HOST") ?? "localhost";
 builder.Services.AddHttpClient("qdrant", c => c.BaseAddress = new Uri($"http://{qdrantHost}:6333"));
@@ -53,6 +55,9 @@ if (!collections.Contains(LyricDocument.Collection))
 {
     await qdrant.CreateCollectionAsync(LyricDocument.Collection, LyricDocument.VectorConfig);
 }
+
+var seeder = app.Services.GetRequiredService<RiderSeeder>();
+await seeder.SeedIfEmptyAsync();
 
 ApiEndpoints.Map(app);
 

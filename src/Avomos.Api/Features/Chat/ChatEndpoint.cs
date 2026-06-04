@@ -2,13 +2,15 @@ using System.ComponentModel;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
+using Avomos.Api.Services;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 
 namespace Avomos.Api.Features.Chat;
 
 public record ChatMessage(string Role, string Content, string? Simple = null, AdvancedData? Advanced = null, List<string>? Hooks = null, string? Reply = null);
-public record ChatRequest(List<string>? TrackIds, string? CreateMode, List<ChatMessage> Messages);
+public record ChatRequest(List<string>? TrackIds, string? CreateMode, List<ChatMessage> Messages, double? RidersThreshold = null);
 public record AdvancedData(string Lyrics, string Styles, string Title);
 public record ChatResponse(string? Simple = null, AdvancedData? Advanced = null, List<string>? Hooks = null, string? Reply = null);
 
@@ -43,9 +45,19 @@ public sealed class AvomosPlugin
 
 public static class ChatEndpoint
 {
+    private static readonly string _systemPrompt;
+
+    static ChatEndpoint()
+    {
+        var promptsDir = Path.Combine(AppContext.BaseDirectory, "Prompts");
+        _systemPrompt = File.Exists(Path.Combine(promptsDir, "SystemPrompt.txt"))
+            ? File.ReadAllText(Path.Combine(promptsDir, "SystemPrompt.txt"))
+            : "You are a helpful assistant for Suno AI music metadata.";
+    }
+
     public static void Map(WebApplication app)
     {
-        app.MapPost("/chat", async (ChatRequest req, Kernel kernel, ILogger<Program> logger, IHttpClientFactory httpFactory) =>
+        app.MapPost("/chat", async (ChatRequest req, Kernel kernel, ILogger<Program> logger, IHttpClientFactory httpFactory, RiderService riderSvc) =>
         {
             var chat = kernel.GetRequiredService<IChatCompletionService>();
             var history = new ChatHistory();
@@ -77,34 +89,40 @@ public static class ChatEndpoint
                 }
             }
 
-            var systemMsg = @"You are a helpful assistant for Suno AI music metadata. You must respond with valid JSON only, no markdown, no code fences.
+            var systemMsg = _systemPrompt;
 
-RESPONSE FORMAT — choose exactly ONE of these structures:
+            // Match riders dynamically from Qdrant based on buffer (max 3 in prompt)
+            if (req.TrackIds?.Count >= 3)
+            {
+                var matchResult = await riderSvc.MatchRidersAsync(req.TrackIds, threshold: req.RidersThreshold ?? 0.0);
+                var matchedRiders = matchResult.Riders.Take(3).ToList();
+                systemMsg += "\n\n=== RIDERS ===";
+                if (matchedRiders.Count > 0)
+                {
+                    foreach (var rider in matchedRiders)
+                    {
+                        systemMsg += $"\n\n--- {rider.Name} ({rider.Type}) ---";
+                        systemMsg += $"\nModel: {rider.Model} | Tempo: {rider.Tempo}";
+                        if (!string.IsNullOrWhiteSpace(rider.Weirdness))
+                            systemMsg += $" | Weirdness: {rider.Weirdness}";
+                        if (!string.IsNullOrWhiteSpace(rider.StyleInfluence))
+                            systemMsg += $" | Style Influence: {rider.StyleInfluence}";
+                        systemMsg += $"\nShort Style: {rider.ShortStyle}";
+                        systemMsg += $"\nDetailed Style: {rider.DetailedStyle}";
+                        systemMsg += $"\nExclude: {rider.Exclude}";
+                    }
+                }
+                else
+                {
+                    systemMsg += "\n\nNo riders matched the current track selection. Riders are reusable style templates — the user can create new ones based on their tracks.";
+                }
+            }
 
-1. For casual chat or questions:
-{ ""reply"": ""your text response"" }
-
-2. For Simple mode generation prompt:
-{ ""simple"": ""Idea: ... Styles: ..."" }
-
-3. For Advanced mode track creation:
-{ ""advanced"": { ""lyrics"": ""..."" , ""styles"": ""..."" , ""title"": ""..."" } }
-
-4. For hooks/ideas (short phrases, each 1-3 words):
-{ ""hooks"": [""phrase1"", ""phrase2"", ""phrase3""] }
-
-Mode rules:
-- Simple mode on Suno → use simple
-- Advanced mode on Suno → use advanced
-- If user asks for ideas/suggestions → use hooks
-- General chat or questions → use reply
-
-When generating lyrics, analyze style tags of tracks in the buffer and use a similar aesthetic. Do NOT mention other tracks from the buffer in your response.";
+            systemMsg += "\n\n=== TRACKS ===";
 
             if (context.Count > 0)
             {
-                systemMsg += "\n\nCurrently selected tracks:\n";
-                systemMsg += string.Join("\n---\n", context);
+                systemMsg += "\n\n" + string.Join("\n---\n", context);
                 systemMsg += "\n\nIf the user asks about a track that was previously discussed but is no longer in the list above, explain that you no longer have access to that track.";
             }
             else
@@ -124,12 +142,14 @@ When generating lyrics, analyze style tags of tracks in the buffer and use a sim
                 }
                 else if (m.Role == "assistant")
                 {
-                    var summary = new List<string>();
-                    if (m.Reply is not null) summary.Add(m.Reply);
-                    if (m.Simple is not null) summary.Add($"simple prompt: {m.Simple}");
-                    if (m.Advanced is not null) summary.Add($"advanced — lyrics, styles: {m.Advanced.Styles}, title: {m.Advanced.Title}");
-                    if (m.Hooks?.Count > 0) summary.Add($"hooks: {string.Join(", ", m.Hooks)}");
-                    history.AddAssistantMessage(summary.Count > 0 ? string.Join("\n", summary) : (m.Content ?? "..."));
+                    var obj = new Dictionary<string, object?>();
+                    if (m.Reply is not null) obj["reply"] = m.Reply;
+                    if (m.Simple is not null) obj["simple"] = m.Simple;
+                    if (m.Advanced is not null) obj["advanced"] = m.Advanced;
+                    if (m.Hooks?.Count > 0) obj["hooks"] = m.Hooks;
+                    history.AddAssistantMessage(obj.Count > 0
+                        ? JsonSerializer.Serialize(obj)
+                        : (m.Content ?? "..."));
                 }
             }
 
@@ -138,9 +158,15 @@ When generating lyrics, analyze style tags of tracks in the buffer and use a sim
             logger.LogInformation("[Chat] reply: {Len} chars", raw.Length);
 
             var response = new ChatResponse();
+            var rawForParse = raw;
+
+            var jsonBlock = Regex.Match(raw, @"```(?:json)?\s*(\{[\s\S]*?\})\s*```", RegexOptions.Multiline);
+            if (jsonBlock.Success)
+                rawForParse = jsonBlock.Groups[1].Value;
+
             try
             {
-                var parsed = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(raw);
+                var parsed = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(rawForParse);
                 if (parsed == null) return Results.Ok(response);
 
                 if (parsed.TryGetValue("reply", out var replyEl))
@@ -165,8 +191,11 @@ When generating lyrics, analyze style tags of tracks in the buffer and use a sim
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Failed to parse chat response");
+                logger.LogWarning(ex, "Failed to parse chat response, raw={Raw}", raw);
             }
+
+            if (response.Reply is null && response.Simple is null && response.Advanced is null && response.Hooks is null)
+                response = response with { Reply = raw.Trim() };
 
             return Results.Ok(response);
         });

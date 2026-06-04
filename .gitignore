@@ -72,5 +72,8 @@ secrets.json
 *.log
 logs/
 
+## Research artifacts
+researches/
+
 ## OS
 Thumbs.db
