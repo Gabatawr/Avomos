@@ -106,13 +106,9 @@ export function App() {
 
   useEffect(() => {
     if (panelHidden) return;
-    const timer = setTimeout(() => {
-      scanDOM();
-      const interval = setInterval(scanDOM, 1000);
-      cleanup = () => clearInterval(interval);
-    }, 500);
-    let cleanup: () => void = () => {};
-    return () => { clearTimeout(timer); cleanup(); };
+    scanDOM();
+    const interval = setInterval(scanDOM, 1000);
+    return () => clearInterval(interval);
   }, [panelHidden]);
 
   useEffect(() => {
