@@ -87,6 +87,7 @@ export interface MatchResponse {
   riders: MatchedRider[];
   canCreate: boolean;
   similarity: number | null;
+  outlierTrackId: string | null;
 }
 
 export interface CreateRiderResult {

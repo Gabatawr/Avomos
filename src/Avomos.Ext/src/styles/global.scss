@@ -562,6 +562,12 @@
   background: rgba(255,248,226,0.04);
   transition: opacity .3s ease, background .3s ease;
 }
+.ac-buf-item.ac-buf-outlier {
+  background: rgba(255,80,80,0.12);
+}
+.ac-buf-item.ac-buf-low {
+  background: rgba(255,200,0,0.08);
+}
 .ac-buf-model { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ac-buf-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ac-buf-plays { text-align: right; white-space: nowrap; }

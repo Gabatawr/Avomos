@@ -36,6 +36,7 @@ export function ChatPanel({ hidden, onToggle }: Props) {
   const [matchedRiders, setMatchedRiders] = useState<MatchedRider[]>([]);
   const [riderCanCreate, setRiderCanCreate] = useState(false);
   const [riderLoading, setRiderLoading] = useState(false);
+  const [outlierTrackId, setOutlierTrackId] = useState<string | null>(null);
   const [riderThreshold, setRiderThreshold] = useState(() => {
     const saved = localStorage.getItem('avomos_rider_threshold');
     return saved ? parseFloat(saved) : 0.55;
@@ -71,6 +72,7 @@ export function ChatPanel({ hidden, onToggle }: Props) {
     if (matchRes) {
       setMatchedRiders(matchRes.riders);
       setRiderCanCreate(matchRes.canCreate);
+      setOutlierTrackId(matchRes.outlierTrackId ?? null);
     }
     setRiderLoading(false);
   }, [riderThreshold]);
@@ -318,7 +320,7 @@ export function ChatPanel({ hidden, onToggle }: Props) {
           </div>
 
           <SearchResults ref={searchRef} buffer={buffer} onAddToBuffer={addToBuffer} chatPanelW={panelW} />
-          <BufferList buffer={buffer} onRemove={removeFromBuffer} onSemanticSearch={semanticSearch} chatPanelW={panelW} />
+          <BufferList buffer={buffer} onRemove={removeFromBuffer} onSemanticSearch={semanticSearch} chatPanelW={panelW} outlierTrackId={outlierTrackId} canCreate={riderCanCreate} />
           <RiderDisplay
             riders={matchedRiders}
             canCreate={riderCanCreate}

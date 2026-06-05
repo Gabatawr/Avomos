@@ -45,7 +45,8 @@ public class RiderSeeder
         var defaults = await LoadDefaultsAsync();
         foreach (var rider in defaults)
         {
-            var vec = await _embeddings.EmbedCachedAsync(rider.ShortStyle, "rider", ct);
+            var embedText = string.IsNullOrWhiteSpace(rider.DetailedStyle) ? rider.ShortStyle : rider.DetailedStyle;
+            var vec = await _embeddings.EmbedCachedAsync(embedText, "rider", ct);
             var pt = RiderDocument.ToPoint(rider, vec);
             await _qdrant.UpsertAsync(RiderDocument.Collection, [pt], cancellationToken: ct);
         }

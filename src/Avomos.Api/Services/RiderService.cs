@@ -34,51 +34,76 @@ public class RiderService
     public async Task<MatchResult> MatchRidersAsync(List<string> trackIds, int limit = 6, double threshold = 0.0)
     {
         if (trackIds.Count < 3)
-            return new MatchResult([], false, null);
+            return new MatchResult([], false, null, null);
 
-        var styles = await FetchStylesAsync(trackIds);
-        if (styles.Count < 3)
-            return new MatchResult([], false, null);
+        var tracks = await FetchTrackPayloadsAsync(trackIds);
+        if (tracks.Count < 3)
+            return new MatchResult([], false, null, null);
+
+        var styles = tracks
+            .Select(t => t.GetValueOrDefault("styles") as string)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Cast<string>()
+            .ToList();
 
         var combined = string.Join(" ", styles);
         var queryVec = await _embeddings.EmbedCachedAsync(combined, "rider-match");
 
         var riders = await SearchRidersRawAsync(queryVec, null, limit, threshold);
 
-        var (canCreate, similarity) = await CheckCoherenceAsync(queryVec, styles.Count, threshold);
+        var (canCreate, similarity, outlierOriginId) = await CheckCoherenceAsync(tracks, threshold);
 
-        return new MatchResult(riders, canCreate, similarity);
+        return new MatchResult(riders, canCreate, similarity, outlierOriginId);
     }
 
-    private async Task<(bool CanCreate, double? Similarity)> CheckCoherenceAsync(float[] queryVec, int trackCount, double threshold)
+    private async Task<(bool CanCreate, double? Similarity, string? OutlierOriginId)> CheckCoherenceAsync(List<Dictionary<string, object?>> tracks, double threshold)
     {
-        var client = _httpFactory.CreateClient("qdrant");
-        var searchBody = new
+        var vecs = new List<(float[] Vec, string OriginId)>();
+        foreach (var t in tracks)
         {
-            vector = new { name = LyricDocument.StylesVec, vector = queryVec },
-            limit = trackCount,
-            with_payload = false,
-            with_vector = false,
-            score_threshold = threshold
-        };
-        var resp = await client.PostAsJsonAsync($"/collections/{LyricDocument.Collection}/points/search", searchBody);
-        if (!resp.IsSuccessStatusCode)
-            return (false, null);
+            var style = t.GetValueOrDefault("styles") as string;
+            if (string.IsNullOrWhiteSpace(style)) continue;
+            var originId = t.GetValueOrDefault("origin_id") as string ?? "";
+            var vec = await _embeddings.EmbedCachedAsync(style, "styles", CancellationToken.None);
+            vecs.Add((vec, originId));
+        }
 
-        var wrapper = await resp.Content.ReadFromJsonAsync<QdrantSearchResult>();
-        var points = wrapper?.Result ?? [];
+        if (vecs.Count < 3)
+            return (false, null, null);
 
-        if (points.Count < 3)
-            return (false, null);
+        var centroid = new float[vecs[0].Vec.Length];
+        foreach (var (v, _) in vecs)
+            for (var i = 0; i < centroid.Length; i++)
+                centroid[i] += v[i];
+        for (var i = 0; i < centroid.Length; i++)
+            centroid[i] /= vecs.Count;
 
-        var avgScore = points.Average(p =>
+        var minSim = 1.0;
+        var outlierOriginId = (string?)null;
+        foreach (var (v, originId) in vecs)
         {
-            if (p.TryGetValue("score", out var sEl) && sEl.ValueKind == JsonValueKind.Number)
-                return sEl.GetDouble();
-            return 0.0;
-        });
+            var sim = CosineSimilarity(v, centroid);
+            if (sim < minSim)
+            {
+                minSim = sim;
+                outlierOriginId = originId;
+            }
+        }
 
-        return (avgScore >= threshold, Math.Round(avgScore, 3));
+        return (minSim >= threshold, Math.Round(minSim, 3), outlierOriginId);
+    }
+
+    private static double CosineSimilarity(float[] a, float[] b)
+    {
+        double dot = 0, na = 0, nb = 0;
+        for (var i = 0; i < a.Length; i++)
+        {
+            dot += a[i] * b[i];
+            na += a[i] * a[i];
+            nb += b[i] * b[i];
+        }
+        var denom = Math.Sqrt(na) * Math.Sqrt(nb);
+        return denom > 0 ? dot / denom : 0;
     }
 
     public async Task<CreateRiderOutput> CreateRiderFromTracksAsync(List<string> trackIds, double threshold = 0.55, ILogger? logger = null)
@@ -172,7 +197,8 @@ public class RiderService
             LyricsTemplate: r.LyricsTemplate ?? ""
         );
 
-        var embedVec = await _embeddings.EmbedCachedAsync(rider.ShortStyle, "rider");
+        var embedText = string.IsNullOrWhiteSpace(rider.DetailedStyle) ? rider.ShortStyle : rider.DetailedStyle;
+        var embedVec = await _embeddings.EmbedCachedAsync(embedText, "rider");
         var pt = RiderDocument.ToPoint(rider, embedVec);
 
         var qdrantClient = new Qdrant.Client.QdrantClient(LyricDocument.QdrantHost);
@@ -354,6 +380,6 @@ public record MatchedRider(
     string ShortStyle, string DetailedStyle, string Exclude, string LyricsTemplate
 );
 
-public record MatchResult(List<MatchedRider> Riders, bool CanCreate, double? Similarity);
+public record MatchResult(List<MatchedRider> Riders, bool CanCreate, double? Similarity, string? OutlierTrackId);
 
 public record CreateRiderOutput(string RiderId, string Status, string? Message);

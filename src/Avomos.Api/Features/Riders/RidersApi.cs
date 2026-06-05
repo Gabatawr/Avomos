@@ -12,7 +12,7 @@ public static class RidersApi
         app.MapPost("/riders/match", async (MatchRidersRequest req, RiderService svc) =>
         {
             var result = await svc.MatchRidersAsync(req.TrackIds, threshold: req.Threshold ?? 0.0);
-            return Results.Ok(new { result.Riders, result.CanCreate, result.Similarity });
+            return Results.Ok(new { result.Riders, result.CanCreate, result.Similarity, result.OutlierTrackId });
         });
 
         app.MapPost("/riders/create", async (CreateRiderRequest req, RiderService svc, ILogger<Program> logger) =>

@@ -7,9 +7,11 @@ interface Props {
   onRemove: (originId: string) => void;
   onSemanticSearch: (originId: string, title: string) => void;
   chatPanelW?: number;
+  outlierTrackId?: string | null;
+  canCreate?: boolean;
 }
 
-export function BufferList({ buffer, onRemove, onSemanticSearch, chatPanelW = 400 }: Props) {
+export function BufferList({ buffer, onRemove, onSemanticSearch, chatPanelW = 400, outlierTrackId, canCreate }: Props) {
   const [modalLyrics, setModalLyrics] = useState<{ title: string; content: string } | null>(null);
 
   if (!buffer.length) return null;
@@ -21,7 +23,7 @@ export function BufferList({ buffer, onRemove, onSemanticSearch, chatPanelW = 40
           const hasStyle = !!(b.style || '').trim();
           const hasContent = !!(b.lyrics || '').trim();
           return (
-            <div key={b._originId} className="ac-buf-item">
+            <div key={b._originId} className={`ac-buf-item${b._originId === outlierTrackId ? (canCreate ? ' ac-buf-low' : ' ac-buf-outlier') : ''}`}>
               <button
                 className="ac-buf-search" title="Find similar"
                 onClick={() => onSemanticSearch(b._originId, b._title)}
