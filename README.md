@@ -1,4 +1,4 @@
-# Avomos v0.3.4
+# Avomos v0.4
 
 Browser extension + backend for parsing and managing metadata from Suno AI song feed.
 
@@ -8,9 +8,13 @@ Browser extension + backend for parsing and managing metadata from Suno AI song 
 Avomos/
 ├── src/
 │   ├── Avomos.Api/          # ASP.NET Core API (C#)
+│   │   ├── Data/            # Static data files (default-riders.json)
 │   │   ├── Features/        # Chat, Riders, Tracks endpoints
+│   │   ├── Infrastructure/  # Shared DTOs, Qdrant HTTP helpers
 │   │   ├── Models/          # Qdrant document model, vectors
-│   │   └── Services/        # RiderService, EmbeddingService, LlmCache
+│   │   ├── Pipelines/       # MediatR pipeline behaviors
+│   │   ├── Prompts/         # LLM prompts as Markdown (.md)
+│   │   └── Services/        # RiderService, EmbeddingService, LlmCache, ChatSessionService
 │   └── Avomos.Ext/          # MV3 extension (Preact + TypeScript + SCSS)
 │       ├── dist/            # Prebuilt Chrome extension (load unpacked)
 │       ├── public/          # Web-accessible resources (page-interceptor.js)
@@ -35,7 +39,6 @@ Avomos/
 | Embeddings | OpenRouter (`nvidia/llama-nemotron-embed-vl-1b-v2:free`) |
 | Chat LLM | OpenAI-compatible (configurable via `Llm` settings) |
 | Extension | Preact, Vite, @crxjs/vite-plugin, SCSS |
-| Parser | TagLibSharp (ID3v2) |
 
 ### Chat Tools
 
@@ -104,9 +107,9 @@ The `Llm` section supports any OpenAI-compatible API — just change Endpoint an
 - `POST /chat` — LLM chat with buffer context (returns reply/simple/advanced/hooks), accepts `ridersThreshold`
 - `GET/POST/DELETE /chat/session` — session management
 
-### Riders (v0.3.0)
+### Riders
 - `POST /riders/match` — match top 3 riders by buffer tracks + threshold, returns `canCreate` + `similarity`
-- `POST /riders/create` — create a new rider via LLM (3 default + 3 matched custom riders, fallback to 6 defaults)
+- `POST /riders/create` — create a new rider via LLM (3 default + 3 matched custom riders, fallback to 6 defaults). Prompt: `Prompts/CreateRider.md`
 - `DELETE /riders/{id}` — delete a custom rider
 
 ## Data Flow
@@ -118,6 +121,16 @@ Suno feed → page-interceptor.js → CustomEvent → TrackStore → API backend
 The extension intercepts Suno's API responses, extracts track metadata, and syncs it with the backend. Qdrant stores lyrics as vectors for semantic search.
 
 ## Changelog
+
+### v0.4 — Technical debt cleanup, project restructure
+
+- **Data extraction**: 6 default riders moved from `RiderSeeder.cs` → `Data/default-riders.json` (~600 lines of C# strings → 86 lines JSON)
+- **Prompts as Markdown**: `SystemPrompt.txt` → `Prompts/SystemPrompt.md`, inline rider creation prompt → `Prompts/CreateRider.md` — editable, readable by humans and LLMs
+- **Shared Qdrant types**: consolidated duplicate REST DTOs (`SearchResult`, `ScrollResponse`, `Payload` helpers) into `Infrastructure/QdrantHttp.cs` — 4 files simplified
+- **Chat sessions**: extracted from `ApiEndpoints.cs` into `Services/ChatSessionService.cs`
+- **Dead code**: removed `Models/LyricTag.cs` (unused)
+- **Lyric model**: `set` → `init` for consistent immutability
+- **Extension**: v0.4.0 release build
 
 ### v0.3.4 — Build artifacts, Firefox support, .gitkeep
 
