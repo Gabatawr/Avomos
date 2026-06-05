@@ -51,10 +51,21 @@ var app = builder.Build();
 app.UseCors();
 
 var qdrant = app.Services.GetRequiredService<QdrantClient>();
-var collections = await qdrant.ListCollectionsAsync();
-if (!collections.Contains(LyricDocument.Collection))
+for (var retry = 0; ; retry++)
 {
-    await qdrant.CreateCollectionAsync(LyricDocument.Collection, LyricDocument.VectorConfig);
+    try
+    {
+        var collections = await qdrant.ListCollectionsAsync();
+        if (!collections.Contains(LyricDocument.Collection))
+        {
+            await qdrant.CreateCollectionAsync(LyricDocument.Collection, LyricDocument.VectorConfig);
+        }
+        break;
+    }
+    catch when (retry < 30)
+    {
+        await Task.Delay(2000);
+    }
 }
 
 var seeder = app.Services.GetRequiredService<RiderSeeder>();

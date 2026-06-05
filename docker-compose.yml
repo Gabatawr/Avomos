@@ -6,6 +6,12 @@ services:
       - "6334:6334"
     volumes:
       - ./volumes/qdrant:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/6333"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   api:
     build:
@@ -24,4 +30,5 @@ services:
       - Llm__Endpoint=https://api.deepseek.com/v1/
       - Llm__ChatModelId=deepseek-v4-flash
     depends_on:
-      - qdrant
+      qdrant:
+        condition: service_healthy
