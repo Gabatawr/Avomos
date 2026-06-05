@@ -107,11 +107,11 @@ public class RiderService
         ));
 
         var defaultSummary = string.Join("\n\n", defaultRiders.Select(r =>
-            $"DEFAULT RIDER (structure example — never modify):\nID: {r.RiderId}\nName: {r.Name}\nShort Style: {r.ShortStyle}\nDetailed Style: {r.DetailedStyle}\nModel: {r.Model}\nTempo: {r.Tempo}\nExclude: {r.Exclude}"
+            $"DEFAULT RIDER (structure example — never modify):\nID: {r.RiderId}\nName: {r.Name}\nShort Style: {r.ShortStyle}\nDetailed Style: {r.DetailedStyle}\nModel: {r.Model}\nTempo: {r.Tempo}\nExclude: {r.Exclude}\nLyrics Template:\n{r.LyricsTemplate}"
         ));
 
         var customSummary = string.Join("\n\n", customRiders.Select(r =>
-            $"CUSTOM RIDER (existing — replace only if the new style is nearly identical):\nID: {r.RiderId}\nName: {r.Name}\nShort Style: {r.ShortStyle}\nDetailed Style: {r.DetailedStyle}"
+            $"CUSTOM RIDER (existing — replace only if the new style is nearly identical):\nID: {r.RiderId}\nName: {r.Name}\nShort Style: {r.ShortStyle}\nDetailed Style: {r.DetailedStyle}\nExclude: {r.Exclude}\nLyrics Template:\n{r.LyricsTemplate}"
         ));
 
         var chat = _kernel.GetRequiredService<IChatCompletionService>();
@@ -138,7 +138,7 @@ OUTPUT FORMAT — respond with valid JSON only:
     ""style_influence"": ""0.X"",
     ""short_style"": ""under 100 chars"",
     ""detailed_style"": ""up to 200 chars"",
-    ""exclude"": ""comma-separated exclude tags"",
+    ""exclude"": ""comma-separated with 'no' prefix (e.g. no synths, no autotune, no reverb wash)"",
     ""lyrics_template"": ""full lyrics template starting with [Intro]""
   }}
 }}

@@ -110,6 +110,8 @@ public static class ChatEndpoint
                         systemMsg += $"\nShort Style: {rider.ShortStyle}";
                         systemMsg += $"\nDetailed Style: {rider.DetailedStyle}";
                         systemMsg += $"\nExclude: {rider.Exclude}";
+                        if (!string.IsNullOrWhiteSpace(rider.LyricsTemplate))
+                            systemMsg += $"\nLyrics Template: {rider.LyricsTemplate}";
                     }
                 }
                 else

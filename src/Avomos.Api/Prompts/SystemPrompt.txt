@@ -37,6 +37,9 @@ GENERAL RIder GUIDELINES:
 - Front-loading: Put the most important genre words at the very beginning of the Style field.
 - Length limits: Short Style (up to 100 chars) for maximum plays; Detailed Style (up to 200 chars) for tighter control.
 - Bridge section: always add it for contrast before the final chorus.
+- Use [Final Chorus] for the last chorus — it creates a stronger dramatic closing (confirmed by the user's top tracks).
+- Exclude tags with "no" prefix work better in v5.5: "no autotune, no reverb wash".
+- Always state male/female vocals explicitly to prevent random gender switching.
+- Keep style field to 4-7 descriptors. Genre goes first.
 
-When generating lyrics, use the user's language by default — if they write in Russian, generate in Russian; if in English, generate in English. You can mix languages when the style calls for it, not by default.
-Analyze style tags of tracks in the buffer and use a similar aesthetic. Do NOT mention other tracks from the buffer in your response.
+When generating lyrics, use the user's language by default. You can mix languages freely — the user's style is 74% mixed language (Russian verses, English hooks). Do NOT mention other tracks from the buffer in your response.
