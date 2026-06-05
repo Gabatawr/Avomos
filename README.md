@@ -122,34 +122,30 @@ The extension intercepts Suno's API responses, extracts track metadata, and sync
 
 ## Changelog
 
-### v0.4 — Technical debt cleanup, project restructure
+### v0.4.2 — Centroid coherence, detailed_style embedding, outlier highlight
 
-- **Data extraction**: 6 default riders moved from `RiderSeeder.cs` → `Data/default-riders.json` (~600 lines of C# strings → 86 lines JSON)
-- **Prompts as Markdown**: `SystemPrompt.txt` → `Prompts/SystemPrompt.md`, inline rider creation prompt → `Prompts/CreateRider.md` — editable, readable by humans and LLMs
-- **Shared Qdrant types**: consolidated duplicate REST DTOs (`SearchResult`, `ScrollResponse`, `Payload` helpers) into `Infrastructure/QdrantHttp.cs` — 4 files simplified
-- **Chat sessions**: extracted from `ApiEndpoints.cs` into `Services/ChatSessionService.cs`
-- **Dead code**: removed `Models/LyricTag.cs` (unused)
-- **Lyric model**: `set` → `init` for consistent immutability
-- **Extension**: v0.4.0 release build
+- **Coherence rework**: tracks compared pairwise via centroid (not vs DB). Returns `outlierTrackId`
+- **Rider embedding**: `short_style` → `detailed_style` (конкретика вместо тегов, 120-180 chars)
+- **Outlier highlight**: extension подсвечивает менее когерентный трек — оранж (canCreate=false) / жёлт (canCreate=true)
+
+### v0.4 — Project restructure
+
+- `RiderSeeder.cs` hardcoded riders → `Data/default-riders.json`
+- Prompts: `.txt` + inline C# → `Prompts/*.md` (markdown)
+- Qdrant REST DTOs → `Infrastructure/QdrantHttp.cs`
+- Chat sessions → `Services/ChatSessionService.cs`
+- `LyricTag.cs` removed, `Lyric` model `set` → `init`
 
 ### v0.3.4 — Build artifacts, Firefox support, .gitkeep
 
-- **Firefox support**: `manifest.firefox.json`, `npm run build:firefox`, prebuilt `.xpi` in repo
-- **Chrome + Firefox prebuilt**: `dist/` (Chrome) and `avomos-firefox.xpi` tracked in git — no build needed
-- **`.gitkeep` in volumes/**: directory structure preserved in repo
-- **Cleaner docker-compose**: removed `ASPNETCORE_ENVIRONMENT=Development` (defaults to Production)
+- Firefox support: `.xpi`, `npm run build:firefox`
+- Chrome + Firefox prebuilt in repo — no build needed
+- volumes/ dir tracked via `.gitkeep`
 
 ### v0.3.0 — Riders
 
-- **Rider system**: 6 default riders seeded into Qdrant on startup, matching dynamically by style similarity
-- **LLM rider creation**: creates/replaces riders from buffer tracks via `POST /riders/create`
-- **Rider deletion**: custom riders can be deleted via hover × in UI
-- **Threshold slider**: configurable similarity threshold (0–1, step 0.05), persisted in localStorage
-- **Track coherence check**: determines if buffer tracks are coherent enough for rider creation
-- **Chat rider injection**: max 3 matched riders injected into LLM prompt context
-- **Debounced rider sync**: 300ms debounce on buffer/threshold changes
-- **Fixed TDZ bug**: useCallback ordering caused "Cannot access Z before initialization"
-- **UI**: all rider controls on one line (names · threshold · +Rider)
+- 6 default riders seeded into Qdrant, matched by style similarity
+- LLM rider creation via `/riders/create`, deletion via `/riders/{id}`
 
 ## Notes
 
