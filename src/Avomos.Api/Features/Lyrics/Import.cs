@@ -1,8 +1,7 @@
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using Avomos.Api.Infrastructure;
 using Avomos.Api.Models;
 using Avomos.Api.Services;
 using MediatR;
@@ -76,13 +75,13 @@ public class UpsertTracksHandler(
         }
 
         var title = track.Title;
-        var lyrics = track.Lyrics ?? "";
-        var model = track.Model ?? "";
-        var styles = track.Styles ?? "";
+        var lyrics = track.Lyrics ?? string.Empty;
+        var model = track.Model ?? string.Empty;
+        var styles = track.Styles ?? string.Empty;
         var plays = track.Plays ?? 0;
         var isPublic = track.IsPublic ?? true;
         var createdAt = ParseCreatedAt(track.CreatedAt);
-        var imageUrl = track.ImageUrl ?? "";
+        var imageUrl = track.ImageUrl ?? string.Empty;
 
         var titleLyricsVec = await embeddings.EmbedCachedAsync($"{title}\n{lyrics}", "title_lyrics", ct);
 
@@ -98,7 +97,7 @@ public class UpsertTracksHandler(
             Lyrics = lyrics,
             Styles = styles,
             CreatedAt = createdAt,
-            Url = string.IsNullOrWhiteSpace(track.OriginId) ? "" : $"https://suno.com/song/{track.OriginId}",
+            Url = string.IsNullOrWhiteSpace(track.OriginId) ? string.Empty : $"https://suno.com/song/{track.OriginId}",
             Plays = plays,
             Model = model,
             IsPublic = isPublic,
@@ -134,26 +133,8 @@ public class UpsertTracksHandler(
             $"/collections/{LyricDocument.Collection}/points/scroll", body, ct);
         resp.EnsureSuccessStatusCode();
 
-        var result = await resp.Content.ReadFromJsonAsync<ScrollResponse>(ct);
+        var result = await resp.Content.ReadFromJsonAsync<QdrantScrollResponse>(ct);
         var point = result?.Result?.Points?.FirstOrDefault();
         return point?.Id;
-    }
-
-    private class ScrollResponse
-    {
-        [JsonPropertyName("result")]
-        public ScrollResult? Result { get; set; }
-    }
-
-    private class ScrollResult
-    {
-        [JsonPropertyName("points")]
-        public List<PointRef>? Points { get; set; }
-    }
-
-    private class PointRef
-    {
-        [JsonPropertyName("id")]
-        public Guid Id { get; set; }
     }
 }

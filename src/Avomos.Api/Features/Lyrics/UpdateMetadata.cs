@@ -1,6 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using Avomos.Api.Infrastructure;
 using Avomos.Api.Models;
 using Avomos.Api.Services;
 using MediatR;
@@ -27,8 +27,8 @@ public class UpdateMetadataHandler(
 
         foreach (var track in command.Tracks)
         {
-            var exists = await PointExists(track.OriginId, ct);
-            if (!exists)
+            var point = await FetchPoint(track.OriginId, ct);
+            if (point is null)
             {
                 notFound++;
                 continue;
@@ -57,7 +57,7 @@ public class UpdateMetadataHandler(
             await SetPayload(track.OriginId, payload, ct);
 
             if (track.Title is not null || track.Lyrics is not null)
-                await UpdateTitleLyricsVec(track.OriginId, track.Title, track.Lyrics, ct);
+                await UpdateTitleLyricsVec(track.OriginId, track.Title, track.Lyrics, point.Payload, ct);
 
             updated++;
         }
@@ -66,15 +66,6 @@ public class UpdateMetadataHandler(
     }
 
     private HttpClient Qdrant() => httpFactory.CreateClient("qdrant");
-
-    private async Task<bool> PointExists(string originId, CancellationToken ct)
-    {
-        var filter = new { must = new[] { new { key = "origin_id", match = new { value = originId } } } };
-        var body = new { filter, limit = 1, with_payload = false, with_vector = false };
-        var resp = await Qdrant().PostAsJsonAsync($"/collections/{LyricDocument.Collection}/points/scroll", body, ct);
-        var result = await resp.Content.ReadFromJsonAsync<ScrollResponse>(ct);
-        return result?.Result?.Points?.Count > 0;
-    }
 
     private async Task SetPayload(string originId, Dictionary<string, object> payload, CancellationToken ct)
     {
@@ -85,13 +76,10 @@ public class UpdateMetadataHandler(
         resp.EnsureSuccessStatusCode();
     }
 
-    private async Task UpdateTitleLyricsVec(string originId, string? newTitle, string? newLyrics, CancellationToken ct)
+    private async Task UpdateTitleLyricsVec(string originId, string? newTitle, string? newLyrics, Dictionary<string, JsonElement>? existingPayload, CancellationToken ct)
     {
-        var point = await FetchPoint(originId, ct);
-        if (point is null) return;
-
-        var title = newTitle ?? GetPayloadString(point.Payload, LyricDocument.PayloadKeys.Title);
-        var lyrics = newLyrics ?? GetPayloadString(point.Payload, LyricDocument.PayloadKeys.Lyrics);
+        var title = newTitle ?? QdrantPayload.String(existingPayload, LyricDocument.PayloadKeys.Title);
+        var lyrics = newLyrics ?? QdrantPayload.String(existingPayload, LyricDocument.PayloadKeys.Lyrics);
         var embedText = string.IsNullOrWhiteSpace(lyrics) ? title : $"{title}\n{lyrics}";
         var vec = await embeddings.EmbedCachedAsync(embedText, "title_lyrics", ct);
 
@@ -101,7 +89,7 @@ public class UpdateMetadataHandler(
             {
                 new
                 {
-                    id = point.Id,
+                    id = originId,
                     vector = new Dictionary<string, float[]>
                     {
                         [LyricDocument.TitleLyricsVec] = vec
@@ -115,42 +103,14 @@ public class UpdateMetadataHandler(
         resp.EnsureSuccessStatusCode();
     }
 
-    private async Task<FetchPointResult?> FetchPoint(string originId, CancellationToken ct)
+    private async Task<QdrantScrollPoint?> FetchPoint(string originId, CancellationToken ct)
     {
         var filter = new { must = new[] { new { key = "origin_id", match = new { value = originId } } } };
         var body = new { filter, limit = 1, with_payload = true, with_vector = false };
         var resp = await Qdrant().PostAsJsonAsync(
             $"/collections/{LyricDocument.Collection}/points/scroll", body, ct);
         resp.EnsureSuccessStatusCode();
-        var result = await resp.Content.ReadFromJsonAsync<ScrollResponse>(ct);
+        var result = await resp.Content.ReadFromJsonAsync<QdrantScrollResponse>(ct);
         return result?.Result?.Points?.FirstOrDefault();
-    }
-
-    private static string GetPayloadString(Dictionary<string, JsonElement>? payload, string key)
-    {
-        if (payload is null) return "";
-        if (!payload.TryGetValue(key, out var value)) return "";
-        return value.ValueKind == JsonValueKind.String ? value.GetString() ?? "" : "";
-    }
-
-    private class ScrollResponse
-    {
-        [JsonPropertyName("result")]
-        public ScrollResult? Result { get; set; }
-    }
-
-    private class ScrollResult
-    {
-        [JsonPropertyName("points")]
-        public List<FetchPointResult>? Points { get; set; }
-    }
-
-    private class FetchPointResult
-    {
-        [JsonPropertyName("id")]
-        public Guid Id { get; set; }
-
-        [JsonPropertyName("payload")]
-        public Dictionary<string, JsonElement>? Payload { get; set; }
     }
 }

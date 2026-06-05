@@ -1,6 +1,8 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
+using Avomos.Api.Infrastructure;
 using Avomos.Api.Models;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
@@ -12,6 +14,15 @@ public class RiderService
     private readonly EmbeddingService _embeddings;
     private readonly IHttpClientFactory _httpFactory;
     private readonly Kernel _kernel;
+    private static readonly string _createRiderPrompt;
+
+    static RiderService()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "Prompts", "CreateRider.md");
+        _createRiderPrompt = File.Exists(path)
+            ? File.ReadAllText(path)
+            : "You are a Suno AI music style analyst. Create a new style rider.";
+    }
 
     public RiderService(EmbeddingService embeddings, IHttpClientFactory httpFactory, Kernel kernel)
     {
@@ -44,7 +55,7 @@ public class RiderService
         var client = _httpFactory.CreateClient("qdrant");
         var searchBody = new
         {
-            vector = new { name = "styles_vec", vector = queryVec },
+            vector = new { name = LyricDocument.StylesVec, vector = queryVec },
             limit = trackCount,
             with_payload = false,
             with_vector = false,
@@ -54,7 +65,7 @@ public class RiderService
         if (!resp.IsSuccessStatusCode)
             return (false, null);
 
-        var wrapper = await resp.Content.ReadFromJsonAsync<SearchResult>();
+        var wrapper = await resp.Content.ReadFromJsonAsync<QdrantSearchResult>();
         var points = wrapper?.Result ?? [];
 
         if (points.Count < 3)
@@ -97,7 +108,6 @@ public class RiderService
             defaultRiders = await SearchRidersRawAsync(queryVec, "default", 3, 0.0);
             customRiders = await SearchRidersRawAsync(queryVec, "custom", 3, threshold);
 
-            // If no custom riders matched, use 6 defaults instead
             if (customRiders.Count == 0)
                 defaultRiders = await SearchRidersRawAsync(queryVec, "default", 6, 0.0);
         }
@@ -114,42 +124,10 @@ public class RiderService
             $"CUSTOM RIDER (existing — replace only if the new style is nearly identical):\nID: {r.RiderId}\nName: {r.Name}\nShort Style: {r.ShortStyle}\nDetailed Style: {r.DetailedStyle}\nExclude: {r.Exclude}\nLyrics Template:\n{r.LyricsTemplate}"
         ));
 
+        var prompt = _createRiderPrompt + $"\n\nTRACKS:\n{trackSummary}\n\n{defaultSummary}\n\n{(customRiders.Count > 0 ? $"EXISTING CUSTOM RIDERS (replace only at very high similarity):\n{customSummary}" : "")}";
+
         var chat = _kernel.GetRequiredService<IChatCompletionService>();
         var history = new ChatHistory();
-
-        var prompt = $@"You are a Suno AI music style analyst. Create a new style rider based on the tracks below.
-
-YOUR TASK:
-- Analyze the tracks' style, structure, and aesthetic
-- Create ONE new rider that captures their essence
-- DEFAULT riders are <b>never</b> to be modified — use them only as structure examples
-- CUSTOM riders may be replaced, but ONLY if your new rider is extremely similar (high confidence, minimal changes) — otherwise create a new one
-- Base the rider primarily on the actual tracks in TRACKS, not on existing riders
-
-OUTPUT FORMAT — respond with valid JSON only:
-{{
-  ""action"": ""create"" or ""replace"",
-  ""existing_rider_id"": ""..."" or null,
-  ""rider"": {{
-    ""name"": ""Rider name"",
-    ""model"": ""recommended model"",
-    ""tempo"": ""tempo description"",
-    ""weirdness"": ""0.X - 0.Y"",
-    ""style_influence"": ""0.X"",
-    ""short_style"": ""under 100 chars"",
-    ""detailed_style"": ""up to 200 chars"",
-    ""exclude"": ""comma-separated with 'no' prefix (e.g. no synths, no autotune, no reverb wash)"",
-    ""lyrics_template"": ""full lyrics template starting with [Intro]""
-  }}
-}}
-
-TRACKS:
-{trackSummary}
-
-{defaultSummary}
-
-{(customRiders.Count > 0 ? $"EXISTING CUSTOM RIDERS (replace only at very high similarity):\n{customSummary}" : "")}";
-
         history.AddSystemMessage(prompt);
 
         var reply = await chat.GetChatMessageContentAsync(history);
@@ -157,7 +135,7 @@ TRACKS:
         logger?.LogInformation("[CreateRider] LLM reply: {Len} chars", raw.Length);
 
         var rawForParse = raw;
-        var jsonBlock = System.Text.RegularExpressions.Regex.Match(raw, @"```(?:json)?\s*(\{[\s\S]*?\})\s*```", System.Text.RegularExpressions.RegexOptions.Multiline);
+        var jsonBlock = Regex.Match(raw, @"```(?:json)?\s*(\{[\s\S]*?\})\s*```", RegexOptions.Multiline);
         if (jsonBlock.Success)
             rawForParse = jsonBlock.Groups[1].Value;
 
@@ -227,7 +205,7 @@ TRACKS:
         {
             searchBody = new
             {
-                vector = new { name = "style_vec", vector = queryVec },
+                vector = new { name = RiderDocument.VectorName, vector = queryVec },
                 filter = new { must = new[] { new { key = "type", match = new { value = typeFilter } } } },
                 limit,
                 with_payload = true,
@@ -239,7 +217,7 @@ TRACKS:
         {
             searchBody = new
             {
-                vector = new { name = "style_vec", vector = queryVec },
+                vector = new { name = RiderDocument.VectorName, vector = queryVec },
                 limit,
                 with_payload = true,
                 with_vector = false,
@@ -250,7 +228,7 @@ TRACKS:
         var resp = await client.PostAsJsonAsync($"/collections/{RiderDocument.Collection}/points/search", searchBody);
         if (!resp.IsSuccessStatusCode) return [];
 
-        var wrapper = await resp.Content.ReadFromJsonAsync<SearchResult>();
+        var wrapper = await resp.Content.ReadFromJsonAsync<QdrantSearchResult>();
         var points = wrapper?.Result ?? [];
 
         var riders = new List<MatchedRider>();
@@ -303,65 +281,50 @@ TRACKS:
             var filter = new { must = new[] { new { key = "origin_id", match = new { value = originId } } } };
             var body = new { filter, limit = 1, with_payload = true, with_vector = false };
             var resp = await client.PostAsJsonAsync("/collections/lyrics/points/scroll", body);
-            var wrapper = await resp.Content.ReadFromJsonAsync<ScrollResult>();
+            var wrapper = await resp.Content.ReadFromJsonAsync<QdrantScrollResponse>();
             var pt = wrapper?.Result?.Points?.FirstOrDefault();
-            if (pt == null || !pt.TryGetValue("payload", out var pje)) return null;
-            var rawPayload = pje.GetRawText();
-            var dict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(rawPayload);
-            if (dict == null) return null;
-            var result = new Dictionary<string, object?>();
-            foreach (var (k, v) in dict)
-                result[k] = v.ValueKind switch
-                {
-                    JsonValueKind.String => v.GetString(),
-                    JsonValueKind.Number => v.TryGetInt64(out var i) ? (object)i : v.GetDouble(),
-                    JsonValueKind.True => true,
-                    JsonValueKind.False => false,
-                    _ => v.ToString()
-                };
-            return result;
+            if (pt == null) return null;
+            return PayloadToDict(pt.Payload);
         }
         catch { return null; }
     }
 
-    private static MatchedRider JsonPayloadToRider(Dictionary<string, JsonElement> p)
+    private static Dictionary<string, object?> PayloadToDict(Dictionary<string, JsonElement>? payload)
+    {
+        var result = new Dictionary<string, object?>();
+        if (payload is null) return result;
+        foreach (var (k, v) in payload)
+            result[k] = v.ValueKind switch
+            {
+                JsonValueKind.String => v.GetString(),
+                JsonValueKind.Number => v.TryGetInt64(out var i) ? (object)i : v.GetDouble(),
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                _ => v.ToString()
+            };
+        return result;
+    }
+
+    private static MatchedRider? JsonPayloadToRider(Dictionary<string, JsonElement> p)
     {
         try
         {
             return new MatchedRider(
-                RiderId: p.GetValueOrDefault("rider_id", default(JsonElement)).GetString() ?? "",
-                Type: p.GetValueOrDefault("type", default(JsonElement)).GetString() ?? "custom",
-                Name: p.GetValueOrDefault("name", default(JsonElement)).GetString() ?? "",
+                RiderId: QdrantPayload.String(p, "rider_id"),
+                Type: QdrantPayload.String(p, "type") is { Length: >0 } t ? t : "custom",
+                Name: QdrantPayload.String(p, "name"),
                 Score: 0.0,
-                Model: p.GetValueOrDefault("model", default(JsonElement)).GetString() ?? "",
-                Tempo: p.GetValueOrDefault("tempo", default(JsonElement)).GetString() ?? "",
-                Weirdness: p.GetValueOrDefault("weirdness", default(JsonElement)).GetString() ?? "",
-                StyleInfluence: p.GetValueOrDefault("style_influence", default(JsonElement)).GetString() ?? "",
-                ShortStyle: p.GetValueOrDefault("short_style", default(JsonElement)).GetString() ?? "",
-                DetailedStyle: p.GetValueOrDefault("detailed_style", default(JsonElement)).GetString() ?? "",
-                Exclude: p.GetValueOrDefault("exclude", default(JsonElement)).GetString() ?? "",
-                LyricsTemplate: p.GetValueOrDefault("lyrics_template", default(JsonElement)).GetString() ?? ""
+                Model: QdrantPayload.String(p, "model"),
+                Tempo: QdrantPayload.String(p, "tempo"),
+                Weirdness: QdrantPayload.String(p, "weirdness"),
+                StyleInfluence: QdrantPayload.String(p, "style_influence"),
+                ShortStyle: QdrantPayload.String(p, "short_style"),
+                DetailedStyle: QdrantPayload.String(p, "detailed_style"),
+                Exclude: QdrantPayload.String(p, "exclude"),
+                LyricsTemplate: QdrantPayload.String(p, "lyrics_template")
             );
         }
         catch { return null; }
-    }
-
-    private class SearchResult
-    {
-        [JsonPropertyName("result")]
-        public List<Dictionary<string, JsonElement>>? Result { get; set; }
-    }
-
-    private class ScrollResult
-    {
-        [JsonPropertyName("result")]
-        public ScrollInner? Result { get; set; }
-    }
-
-    private class ScrollInner
-    {
-        [JsonPropertyName("points")]
-        public List<Dictionary<string, JsonElement>>? Points { get; set; }
     }
 
     private class RiderGenerationOutput

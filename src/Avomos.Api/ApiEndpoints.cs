@@ -1,17 +1,13 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using Avomos.Api.Features.Lyrics;
 using Avomos.Api.Features.Chat;
+using Avomos.Api.Features.Lyrics;
 using Avomos.Api.Features.Riders;
+using Avomos.Api.Services;
 using MediatR;
 
 namespace Avomos.Api;
 
 public static class ApiEndpoints
 {
-    private static readonly string ChatDir = Path.Combine(".cache", "chat");
-    private static readonly string IndexPath = Path.Combine(ChatDir, "index.json");
-
     public static void Map(WebApplication app)
     {
         app.MapGet("/tracks/search", async (
@@ -62,156 +58,99 @@ public static class ApiEndpoints
 
         // --- Multi-session API ---
 
-        app.MapGet("/chat/sessions", () =>
+        app.MapGet("/chat/sessions", (ChatSessionService svc) =>
         {
-            var (sessions, currentId) = LoadIndex();
+            var (sessions, currentId) = svc.LoadIndex();
             return Results.Ok(new { sessions, currentId });
         });
 
-        app.MapGet("/chat/session", () =>
+        app.MapGet("/chat/session", (ChatSessionService svc) =>
         {
-            var (sessions, currentId) = LoadIndex();
+            var (sessions, currentId) = svc.LoadIndex();
             if (currentId == null)
             {
-                var id = Guid.NewGuid().ToString();
-                var now = DateTime.UtcNow.ToString("O");
-                sessions.Insert(0, new SessionInfo(id, "New Chat", now));
-                SaveIndex(sessions, id);
-                File.WriteAllText(Path.Combine(ChatDir, $"{id}.json"), "{}");
-                return Results.Ok(new { sessionId = id, buffer = new List<object>(), messages = new List<object>() });
+                var info = svc.CreateInfo("New Chat");
+                svc.SaveIndex([info], info.Id);
+                svc.CreateEmptySession();
+                return Results.Ok(new { sessionId = info.Id, buffer = new List<object>(), messages = new List<object>() });
             }
-            var path = Path.Combine(ChatDir, $"{currentId}.json");
-            if (!File.Exists(path))
-            {
-                File.WriteAllText(path, "{}");
-                return Results.Ok(new { sessionId = currentId, buffer = new List<object>(), messages = new List<object>() });
-            }
-            var json = File.ReadAllText(path);
-            var data = JsonSerializer.Deserialize<SessionData>(json);
+            var data = svc.LoadSession(currentId);
             return Results.Ok(new { sessionId = currentId, buffer = data?.Buffer ?? new List<object>(), messages = data?.Messages ?? new List<object>() });
         });
 
-        app.MapGet("/chat/session/{id}", (string id) =>
+        app.MapGet("/chat/session/{id}", (string id, ChatSessionService svc) =>
         {
-            var path = Path.Combine(ChatDir, $"{id}.json");
-            if (!File.Exists(path)) return Results.NotFound();
-            var json = File.ReadAllText(path);
-            var data = JsonSerializer.Deserialize<SessionData>(json);
-            return Results.Ok(new { sessionId = id, buffer = data?.Buffer ?? new List<object>(), messages = data?.Messages ?? new List<object>() });
+            var data = svc.LoadSession(id);
+            if (data is null) return Results.NotFound();
+            return Results.Ok(new { sessionId = id, buffer = data.Buffer ?? new List<object>(), messages = data.Messages ?? new List<object>() });
         });
 
-        app.MapPost("/chat/session", async (SaveSessionRequest data) =>
+        app.MapPost("/chat/session", async (SaveSessionRequest req, ChatSessionService svc) =>
         {
-            Directory.CreateDirectory(ChatDir);
-            var sessionId = data.SessionId ?? Guid.NewGuid().ToString();
-            var path = Path.Combine(ChatDir, $"{sessionId}.json");
+            var sessionId = req.SessionId ?? Guid.NewGuid().ToString();
 
-            var (sessions, _) = LoadIndex();
+            var (sessions, _) = svc.LoadIndex();
             var existing = sessions.FirstOrDefault(s => s.Id == sessionId);
             var updatedAt = DateTime.UtcNow.ToString("O");
 
-            var sessionData = new SessionData { Buffer = data.Buffer, Messages = data.Messages, UpdatedAt = updatedAt };
-            await File.WriteAllTextAsync(path, JsonSerializer.Serialize(sessionData));
+            var sessionData = new SessionData { Buffer = req.Buffer, Messages = req.Messages, UpdatedAt = updatedAt };
+            await svc.SaveSessionAsync(sessionId, sessionData);
 
             var name = existing?.Name ?? "New Chat";
             var newSessions = sessions.Where(s => s.Id != sessionId).ToList();
             newSessions.Insert(0, new SessionInfo(sessionId, name, updatedAt));
-            SaveIndex(newSessions, sessionId);
+            svc.SaveIndex(newSessions, sessionId);
 
             return Results.Ok(new { sessionId, sessions = newSessions, currentId = sessionId });
         });
 
-        app.MapPost("/chat/sessions/create", () =>
+        app.MapPost("/chat/sessions/create", (ChatSessionService svc) =>
         {
-            var id = Guid.NewGuid().ToString();
-            var now = DateTime.UtcNow.ToString("O");
-            var (sessions, _) = LoadIndex();
-            sessions.Insert(0, new SessionInfo(id, "New Chat", now));
-            SaveIndex(sessions, id);
-            File.WriteAllText(Path.Combine(ChatDir, $"{id}.json"), "{}");
-            return Results.Ok(new { id });
+            var info = svc.CreateInfo("New Chat");
+            var (sessions, _) = svc.LoadIndex();
+            sessions.Insert(0, info);
+            svc.SaveIndex(sessions, info.Id);
+            svc.CreateEmptySession();
+            return Results.Ok(new { id = info.Id });
         });
 
-        app.MapPut("/chat/session/{id}/rename", async (string id, RenameRequest data) =>
+        app.MapPut("/chat/session/{id}/rename", (string id, RenameRequest req, ChatSessionService svc) =>
         {
-            var (sessions, currentId) = LoadIndex();
+            var (sessions, currentId) = svc.LoadIndex();
             var idx = sessions.FindIndex(s => s.Id == id);
             if (idx < 0) return Results.NotFound();
-            sessions[idx] = sessions[idx] with { Name = data.Name ?? sessions[idx].Name };
-            SaveIndex(sessions, currentId);
-            await Task.CompletedTask;
+            sessions[idx] = sessions[idx] with { Name = req.Name ?? sessions[idx].Name };
+            svc.SaveIndex(sessions, currentId);
             return Results.Ok(new { sessions, currentId });
         });
 
-        app.MapDelete("/chat/session/{id}", (string id) =>
+        app.MapDelete("/chat/session/{id}", (string id, ChatSessionService svc) =>
         {
-            var (sessions, currentId) = LoadIndex();
+            var (sessions, currentId) = svc.LoadIndex();
             var newSessions = sessions.Where(s => s.Id != id).ToList();
-            var path = Path.Combine(ChatDir, $"{id}.json");
-            if (File.Exists(path)) File.Delete(path);
+            svc.DeleteSession(id);
             var newCurrentId = currentId == id ? newSessions.FirstOrDefault()?.Id : currentId;
-            SaveIndex(newSessions, newCurrentId);
+            svc.SaveIndex(newSessions, newCurrentId);
             return Results.Ok(new { currentId = newCurrentId });
         });
 
         app.MapPost("/logs", async (LogEntry entry, ILogger<Program> logger) =>
         {
             logger.LogInformation("[Ext] {Message}", entry.Message);
+            await Task.CompletedTask;
             return Results.Ok();
         });
     }
-
-    // --- Session index helpers ---
-
-    private static (List<SessionInfo> sessions, string? currentId) LoadIndex()
-    {
-        if (!File.Exists(IndexPath)) return (new List<SessionInfo>(), null);
-        var json = File.ReadAllText(IndexPath);
-        var data = JsonSerializer.Deserialize<SessionIndex>(json);
-        return (data?.Sessions ?? new List<SessionInfo>(), data?.CurrentId);
-    }
-
-    private static void SaveIndex(List<SessionInfo> sessions, string? currentId)
-    {
-        Directory.CreateDirectory(ChatDir);
-        File.WriteAllText(IndexPath, JsonSerializer.Serialize(new SessionIndex { Sessions = sessions, CurrentId = currentId }));
-    }
 }
-
-// --- Records ---
 
 public record LogEntry(string Message);
 
-public record SessionInfo(
-    [property: JsonPropertyName("id")] string Id,
-    [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("updatedAt")] string UpdatedAt
-);
-
-public class SessionIndex
-{
-    [JsonPropertyName("sessions")]
-    public List<SessionInfo> Sessions { get; set; } = new();
-    [JsonPropertyName("currentId")]
-    public string? CurrentId { get; set; }
-}
-
-public class SessionData
-{
-    [JsonPropertyName("buffer")]
-    public List<object>? Buffer { get; set; }
-    [JsonPropertyName("messages")]
-    public List<object>? Messages { get; set; }
-    [JsonPropertyName("updatedAt")]
-    public string? UpdatedAt { get; set; }
-}
-
 public record SaveSessionRequest(
-    [property: JsonPropertyName("sessionId")] string? SessionId,
-    [property: JsonPropertyName("buffer")] List<object>? Buffer,
-    [property: JsonPropertyName("messages")] List<object>? Messages
+    string? SessionId,
+    List<object>? Buffer,
+    List<object>? Messages
 );
 
 public record RenameRequest(
-    [property: JsonPropertyName("name")] string? Name
+    string? Name
 );

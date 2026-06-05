@@ -1,8 +1,8 @@
 using System.ComponentModel;
-using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using Avomos.Api.Infrastructure;
 using Avomos.Api.Services;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
@@ -49,9 +49,9 @@ public static class ChatEndpoint
 
     static ChatEndpoint()
     {
-        var promptsDir = Path.Combine(AppContext.BaseDirectory, "Prompts");
-        _systemPrompt = File.Exists(Path.Combine(promptsDir, "SystemPrompt.txt"))
-            ? File.ReadAllText(Path.Combine(promptsDir, "SystemPrompt.txt"))
+        var path = Path.Combine(AppContext.BaseDirectory, "Prompts", "SystemPrompt.md");
+        _systemPrompt = File.Exists(path)
+            ? File.ReadAllText(path)
             : "You are a helpful assistant for Suno AI music metadata.";
     }
 
@@ -91,7 +91,6 @@ public static class ChatEndpoint
 
             var systemMsg = _systemPrompt;
 
-            // Match riders dynamically from Qdrant based on buffer (max 3 in prompt)
             if (req.TrackIds?.Count >= 3)
             {
                 var matchResult = await riderSvc.MatchRidersAsync(req.TrackIds, threshold: req.RidersThreshold ?? 0.0);
@@ -211,23 +210,10 @@ public static class ChatEndpoint
             var filter = new { must = new[] { new { key = "origin_id", match = new { value = originId } } } };
             var body = new { filter, limit = 1, with_payload = true, with_vector = false };
             var resp = await client.PostAsJsonAsync("/collections/lyrics/points/scroll", body);
-            var wrapper = await resp.Content.ReadFromJsonAsync<ScrollWrapper>();
+            var wrapper = await resp.Content.ReadFromJsonAsync<QdrantScrollResponse>();
             var pt = wrapper?.Result?.Points?.FirstOrDefault();
-            var rawPayload = pt != null && pt.TryGetValue("payload", out var pje) ? pje.GetRawText() : null;
-            if (rawPayload == null) return null;
-            var dict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(rawPayload);
-            if (dict == null) return null;
-            var result = new Dictionary<string, object?>();
-            foreach (var (k, v) in dict)
-                result[k] = v.ValueKind switch
-                {
-                    JsonValueKind.String => v.GetString(),
-                    JsonValueKind.Number => v.TryGetInt64(out var i) ? (object)i : v.GetDouble(),
-                    JsonValueKind.True => true,
-                    JsonValueKind.False => false,
-                    _ => v.ToString()
-                };
-            return result;
+            if (pt == null || pt.Payload == null) return null;
+            return PayloadToDict(pt.Payload);
         }
         catch
         {
@@ -235,15 +221,19 @@ public static class ChatEndpoint
         }
     }
 
-    private class ScrollWrapper
+    private static Dictionary<string, object?> PayloadToDict(Dictionary<string, JsonElement>? payload)
     {
-        [JsonPropertyName("result")]
-        public ScrollInner? Result { get; set; }
-    }
-
-    private class ScrollInner
-    {
-        [JsonPropertyName("points")]
-        public List<Dictionary<string, JsonElement>>? Points { get; set; }
+        var result = new Dictionary<string, object?>();
+        if (payload is null) return result;
+        foreach (var (k, v) in payload)
+            result[k] = v.ValueKind switch
+            {
+                JsonValueKind.String => v.GetString(),
+                JsonValueKind.Number => v.TryGetInt64(out var i) ? (object)i : v.GetDouble(),
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                _ => v.ToString()
+            };
+        return result;
     }
 }

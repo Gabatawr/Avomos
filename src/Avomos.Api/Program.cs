@@ -19,6 +19,7 @@ builder.Services.AddSingleton<LlmCache>();
 builder.Services.AddSingleton<EmbeddingService>();
 builder.Services.AddSingleton<RiderSeeder>();
 builder.Services.AddSingleton<RiderService>();
+builder.Services.AddSingleton<ChatSessionService>();
 builder.Services.AddSingleton(new QdrantClient(LyricDocument.QdrantHost));
 var qdrantHost = Environment.GetEnvironmentVariable("QDRANT_HOST") ?? "localhost";
 builder.Services.AddHttpClient("qdrant", c => c.BaseAddress = new Uri($"http://{qdrantHost}:6333"));
