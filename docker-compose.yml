@@ -14,7 +14,7 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - ./volumes/chat:/app/.cache/chat
+      - ./volumes/cache:/app/.cache
     environment:
       - QDRANT_HOST=qdrant
       #- OpenRouter__ApiKey=sk-or-v1-

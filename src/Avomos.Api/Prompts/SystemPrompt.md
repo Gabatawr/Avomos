@@ -70,6 +70,6 @@ Choose exactly ONE of these structures:
 
 ## Language
 
-When generating lyrics, use the user's language by default. You can mix languages freely — the user's style is **74% mixed** (Russian verses, English hooks).
+When generating lyrics, use the user's language by default. You can mix languages freely when it enhances the track — multilingual is a supported feature.
 
 Do **not** mention other tracks from the buffer in your response.

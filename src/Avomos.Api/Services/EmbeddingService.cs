@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace Avomos.Api.Services;
 
@@ -41,7 +42,8 @@ public class EmbeddingService
     public async Task<float[]> EmbedCachedAsync(string text, string feature, CancellationToken ct = default)
     {
         var key = _cache.Key(text);
-        var cacheKey = $"{feature}_{key}";
+        var modelTag = Regex.Replace(_model, @"[^a-zA-Z0-9._-]", "_");
+        var cacheKey = $"{feature}_{modelTag}_{key}";
         var cached = await _cache.GetAsync<float[]>("embedding", cacheKey);
         if (cached is not null) return cached;
 

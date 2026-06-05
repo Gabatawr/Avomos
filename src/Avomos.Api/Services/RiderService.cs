@@ -44,6 +44,7 @@ public class RiderService
             .Select(t => t.GetValueOrDefault("styles") as string)
             .Where(s => !string.IsNullOrWhiteSpace(s))
             .Cast<string>()
+            .OrderBy(s => s)
             .ToList();
 
         var combined = string.Join(" ", styles);
@@ -119,6 +120,7 @@ public class RiderService
             .Select(t => t.GetValueOrDefault("styles") as string)
             .Where(s => !string.IsNullOrWhiteSpace(s))
             .Cast<string>()
+            .OrderBy(s => s)
             .ToList();
 
         List<MatchedRider> defaultRiders = [];
