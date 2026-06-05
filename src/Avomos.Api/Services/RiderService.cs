@@ -199,8 +199,7 @@ public class RiderService
             LyricsTemplate: r.LyricsTemplate ?? ""
         );
 
-        var embedText = string.IsNullOrWhiteSpace(rider.DetailedStyle) ? rider.ShortStyle : rider.DetailedStyle;
-        var embedVec = await _embeddings.EmbedCachedAsync(embedText, "rider");
+        var embedVec = await _embeddings.EmbedCachedAsync(RiderDocument.BuildEmbedText(rider), "rider");
         var pt = RiderDocument.ToPoint(rider, embedVec);
 
         var qdrantClient = new Qdrant.Client.QdrantClient(LyricDocument.QdrantHost);

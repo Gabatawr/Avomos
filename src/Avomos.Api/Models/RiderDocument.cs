@@ -58,6 +58,9 @@ public static class RiderDocument
         }
     };
 
+    public static string BuildEmbedText(RiderData r) =>
+        $"{r.ShortStyle} | {r.DetailedStyle} | Tempo: {r.Tempo} | Style influence: {r.StyleInfluence}";
+
     public static RiderData FromPayload(Dictionary<string, object?> payload) => new(
         RiderId: (string)(payload.GetValueOrDefault("rider_id") ?? ""),
         Type: (string)(payload.GetValueOrDefault("type") ?? "custom"),
