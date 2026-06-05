@@ -24,12 +24,12 @@ Choose exactly ONE of these structures:
 
 ### 2. Simple mode generation prompt
 ```json
-{ "simple": "Idea: ... Styles: ..." }
+{ "simple": "Genre: [genre description], Style: [style tags]" }
 ```
 
 ### 3. Advanced mode track creation
 ```json
-{ "advanced": { "lyrics": "...", "styles": "...", "title": "..." } }
+{ "advanced": { "lyrics": "[full lyrics]", "styles": "[style tags]", "title": "[track title]" } }
 ```
 
 ### 4. Hooks / ideas (short phrases, each 1-3 words)
