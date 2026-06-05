@@ -125,8 +125,8 @@ The extension intercepts Suno's API responses, extracts track metadata, and sync
 ### v0.4.2 — Centroid coherence, detailed_style embedding, outlier highlight
 
 - **Coherence rework**: tracks compared pairwise via centroid (not vs DB). Returns `outlierTrackId`
-- **Rider embedding**: `short_style` → `detailed_style` (конкретика вместо тегов, 120-180 chars)
-- **Outlier highlight**: extension подсвечивает менее когерентный трек — оранж (canCreate=false) / жёлт (canCreate=true)
+- **Rider embedding**: `short_style` → `detailed_style` (concrete description over tags, 120-180 chars)
+- **Outlier highlight**: extension shows least coherent track — orange (canCreate=false) / yellow (canCreate=true)
 
 ### v0.4 — Project restructure
 
