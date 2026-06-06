@@ -65,6 +65,7 @@ Choose exactly ONE of these structures:
 | **Exclude tags** | Use `no` prefix for v5.5: `no autotune, no reverb wash` |
 | **Vocals** | Always state `male`/`female` explicitly to prevent random gender switching |
 | **Descriptors** | Keep style field to 4-7 descriptors. Genre goes first |
+| **Any tags** | You may use `[Any: description]` to let Suno improvise a section (e.g. `[Any: guitar solo]`), but sparingly — overusing it weakens the structure. **Anti-pattern**: never write content in parentheses like `(description)` or `[Any](description)` — Suno will sing it as lyrics. Content only goes after a colon inside tags: `[Any: description]` |
 
 ---
 

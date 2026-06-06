@@ -164,7 +164,7 @@ export function ChatPanel({ hidden, onToggle }: Props) {
     api.restoreSession().then(data => {
       if (data) {
         if (data.sessionId) setSessionId(data.sessionId);
-        if (data.buffer) {
+        if (data.buffer?.length) {
           const buf = data.buffer as BufferItem[];
           setBuffer(buf);
           if (buf.length >= 3) scheduleRiders(buf, riderThreshold);
@@ -180,7 +180,7 @@ export function ChatPanel({ hidden, onToggle }: Props) {
         }
       }
     });
-  }, [scheduleRiders]);
+  }, []);
 
   useEffect(() => () => { if (riderTimerRef.current) clearTimeout(riderTimerRef.current); }, []);
 

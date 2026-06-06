@@ -12,7 +12,7 @@
   "content_scripts": [
     {
       "js": [
-        "assets/content-BOS9ClUg.js"
+        "assets/content-BZp-DDxc.js"
       ],
       "matches": [
         "https://suno.com/*"
@@ -30,7 +30,7 @@
       ],
       "resources": [
         "page-interceptor.js",
-        "assets/content-BOS9ClUg.js"
+        "assets/content-BZp-DDxc.js"
       ],
       "use_dynamic_url": false
     }
@@ -38,5 +38,5 @@
   "action": {
     "default_title": "Avomos"
   },
-  "version": "0.4.6"
+  "version": "0.4.7"
 }
