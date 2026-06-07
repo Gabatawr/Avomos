@@ -1,4 +1,3 @@
-import { useEffect, useRef } from 'react';
 import type { ChatMessage } from '../lib/types';
 
 interface Props {
@@ -16,20 +15,15 @@ function esc(s: string): string {
 }
 
 export function MessageList({ messages, expanded, onToggleExpand, onInsert, onHookClick }: Props) {
-  const endRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
   return (
     <div className="ac-messages">
-      {messages.map((m, i) => {
-        const isPending = m.content === '...' && i === messages.length - 1;
+      {[...messages].reverse().map((m, i) => {
+        const origIndex = messages.length - 1 - i;
+        const isPending = m.content === '...' && origIndex === messages.length - 1;
         const isTool = m.reply || m.simple || m.advanced || m.hooks;
 
         return (
-          <div key={i} className={`ac-msg ac-msg-${m.role}${isPending ? ' ac-msg-pending' : ''}`}>
+          <div key={origIndex} className={`ac-msg ac-msg-${m.role}${isPending ? ' ac-msg-pending' : ''}`}>
             {m.role === 'user' && (
               <div className="ac-msg-bubble">{esc(m.content)}</div>
             )}
@@ -43,10 +37,10 @@ export function MessageList({ messages, expanded, onToggleExpand, onInsert, onHo
               <>
                 <div className="ac-msg-bubble">{esc(m.advanced.title || '(no title)')}</div>
                 <div className="ac-msg-extra">
-                  <button className="ac-msg-toggle" onClick={() => onToggleExpand(i)}>
-                    {expanded[i] ? '▲' : '▼'} Lyrics, Styles, Title
+                  <button className="ac-msg-toggle" onClick={() => onToggleExpand(origIndex)}>
+                    {expanded[origIndex] ? '▲' : '▼'} Lyrics, Styles, Title
                   </button>
-                  <div className="ac-msg-extra-body" style={{ display: expanded[i] ? '' : 'none' }}>
+                  <div className="ac-msg-extra-body" style={{ display: expanded[origIndex] ? '' : 'none' }}>
                     {m.advanced.lyrics && (
                       <div className="ac-msg-extra-row">
                         <span className="ac-msg-extra-label">Lyrics</span>
@@ -85,7 +79,6 @@ export function MessageList({ messages, expanded, onToggleExpand, onInsert, onHo
           </div>
         );
       })}
-      <div ref={endRef} />
     </div>
   );
 }

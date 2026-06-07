@@ -60,6 +60,9 @@ examples/
 ## LLM cache (dev artifacts, not tracked)
 .cache/
 
+## Codegraph index (dev artifact)
+.codegraph/
+
 ## Node.js (Avomos.Ext)
 node_modules/
 dist-firefox/
