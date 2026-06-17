@@ -1,47 +1,19 @@
-import { config } from './config';
 import { trackStore } from './track-store';
+import { bridge } from './bridge';
 import type { ChatMessage, ChatResponse, SearchHit, SessionInfo, MatchResponse, CreateRiderResult } from './types';
-
-function apiUrl(path: string): string {
-  return `${config.API_BASE}${path}`;
-}
-
-async function apiFetch(path: string, options?: RequestInit): Promise<Response | null> {
-  try {
-    return await fetch(apiUrl(path), options);
-  } catch {
-    return null;
-  }
-}
-
-async function apiPost(path: string, body: unknown): Promise<Response | null> {
-  return apiFetch(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-}
-
-async function apiPut(path: string, body: unknown): Promise<Response | null> {
-  return apiFetch(path, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-}
 
 export const api = {
   sendLog(msg: string) {
     console.log(msg);
-    apiPost('/logs', { message: msg });
+    bridge.post('/logs', { message: msg });
   },
 
   async checkTrack(t: { originId: string }) {
     if (trackStore.checkPending.has(t.originId)) return;
     trackStore.checkPending.add(t.originId);
     try {
-      const r = await fetch(apiUrl(`/tracks/${t.originId}`));
-      if (r.ok) {
+      const r = await bridge.fetch(`/tracks/${t.originId}`);
+      if (r && r.ok) {
         const body: Record<string, unknown> = await r.json();
         if (body.found === true && body.lyric) {
           trackStore.applyDbData(t.originId, body.lyric as Record<string, unknown>);
@@ -59,7 +31,7 @@ export const api = {
   async updateAll(): Promise<{ ok: boolean; data?: { updated?: number } }> {
     const list = trackStore.buildUpdateList();
     if (!list.length) return { ok: false };
-    const r = await apiPost('/tracks/metadata', { tracks: list });
+    const r = await bridge.post('/tracks/metadata', { tracks: list });
     if (r && r.ok) {
       const data: { updated?: number } = await r.json();
       trackStore.applyUpdateResult(list, data);
@@ -71,7 +43,7 @@ export const api = {
   async importAll(): Promise<{ ok: boolean; data?: { imported?: number; updated?: number } }> {
     const list = trackStore.buildImportList();
     if (!list.length) return { ok: false };
-    const r = await apiPost('/tracks/upsert', { tracks: list });
+    const r = await bridge.post('/tracks/upsert', { tracks: list });
     if (r && r.ok) {
       const data: { imported?: number; updated?: number } = await r.json();
       trackStore.applyImportResult(list.map(t => ({ originId: t.originId })));
@@ -83,10 +55,10 @@ export const api = {
   async search(query: string, limit = 3, titleLyricsWeight = 0.7): Promise<SearchHit[]> {
     try {
       const stylesWeight = 1 - titleLyricsWeight;
-      const r = await fetch(
-        apiUrl(`/tracks/search?query=${encodeURIComponent(query)}&limit=${limit}&titleLyricsWeight=${titleLyricsWeight}&stylesWeight=${stylesWeight}`)
+      const r = await bridge.fetch(
+        `/tracks/search?query=${encodeURIComponent(query)}&limit=${limit}&titleLyricsWeight=${titleLyricsWeight}&stylesWeight=${stylesWeight}`
       );
-      if (!r.ok) return [];
+      if (!r || !r.ok) return [];
       const data = await r.json();
       return data?.hits || [];
     } catch {
@@ -96,7 +68,7 @@ export const api = {
 
   async chat(trackIds: string[], createMode: string, messages: ChatMessage[], ridersThreshold?: number): Promise<ChatResponse | null> {
     try {
-      const r = await apiPost('/chat', { trackIds, createMode, messages, ridersThreshold });
+      const r = await bridge.post('/chat', { trackIds, createMode, messages, ridersThreshold });
       if (!r || !r.ok) return null;
       return await r.json();
     } catch {
@@ -105,44 +77,44 @@ export const api = {
   },
 
   async saveSession(sessionId: string, buffer: unknown[], messages: unknown[]): Promise<{ sessionId: string; sessions: SessionInfo[]; currentId: string } | null> {
-    const r = await apiPost('/chat/session', { sessionId, buffer, messages });
+    const r = await bridge.post('/chat/session', { sessionId, buffer, messages });
     if (!r || !r.ok) return null;
     return await r.json();
   },
 
   async restoreSession(): Promise<{ sessionId: string; buffer: unknown[]; messages: unknown[] } | null> {
-    const r = await apiFetch('/chat/session');
+    const r = await bridge.fetch('/chat/session');
     if (!r || !r.ok) return null;
     return await r.json();
   },
 
   async loadSessions(): Promise<{ sessions: SessionInfo[]; currentId: string } | null> {
-    const r = await apiFetch('/chat/sessions');
+    const r = await bridge.fetch('/chat/sessions');
     if (!r || !r.ok) return null;
     return await r.json();
   },
 
   async createSession(): Promise<{ id: string } | null> {
-    const r = await apiFetch('/chat/sessions/create', { method: 'POST' });
+    const r = await bridge.fetch('/chat/sessions/create', { method: 'POST' });
     if (!r || !r.ok) return null;
     return await r.json();
   },
 
   async renameSession(id: string, name: string): Promise<{ sessions: SessionInfo[]; currentId: string } | null> {
-    const r = await apiPut(`/chat/session/${id}/rename`, { name });
+    const r = await bridge.put(`/chat/session/${id}/rename`, { name });
     if (!r || !r.ok) return null;
     return await r.json();
   },
 
   async deleteSession(id: string): Promise<{ currentId?: string } | null> {
-    const r = await apiFetch(`/chat/session/${id}`, { method: 'DELETE' });
+    const r = await bridge.fetch(`/chat/session/${id}`, { method: 'DELETE' });
     if (!r || !r.ok) return null;
     return await r.json();
   },
 
   async riderMatch(trackIds: string[], threshold?: number): Promise<MatchResponse | null> {
     try {
-      const r = await apiPost('/riders/match', { trackIds, threshold });
+      const r = await bridge.post('/riders/match', { trackIds, threshold });
       if (!r || !r.ok) return null;
       return await r.json();
     } catch { return null; }
@@ -150,7 +122,7 @@ export const api = {
 
   async riderCreate(trackIds: string[], threshold?: number): Promise<CreateRiderResult | null> {
     try {
-      const r = await apiPost('/riders/create', { trackIds, threshold });
+      const r = await bridge.post('/riders/create', { trackIds, threshold });
       if (!r || !r.ok) return null;
       return await r.json();
     } catch { return null; }
@@ -158,7 +130,7 @@ export const api = {
 
   async riderDelete(id: string): Promise<boolean> {
     try {
-      const r = await apiFetch(`/riders/${id}`, { method: 'DELETE' });
+      const r = await bridge.fetch(`/riders/${id}`, { method: 'DELETE' });
       return r !== null && r.ok;
     } catch { return false; }
   },

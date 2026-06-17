@@ -9,17 +9,21 @@
     "https://suno.com/*",
     "http://localhost:5000/*"
   ],
+  "background": {
+    "service_worker": "service-worker-loader.js",
+    "type": "module"
+  },
   "content_scripts": [
     {
       "js": [
-        "assets/content-BVFHjQWf.js"
+        "assets/content.tsx-loader-hZEgQfb0.js"
       ],
       "matches": [
         "https://suno.com/*"
       ],
       "run_at": "document_idle",
       "css": [
-        "assets/content-C25KCyIP.css"
+        "assets/global-C25KCyIP.css"
       ]
     }
   ],
@@ -30,7 +34,8 @@
       ],
       "resources": [
         "page-interceptor.js",
-        "assets/content-BVFHjQWf.js"
+        "assets/global-DpuS3zah.js",
+        "assets/content.tsx-Df-f1TC-.js"
       ],
       "use_dynamic_url": false
     }
@@ -38,5 +43,5 @@
   "action": {
     "default_title": "Avomos"
   },
-  "version": "0.4.11"
+  "version": "0.5.1"
 }

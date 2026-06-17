@@ -1,4 +1,4 @@
-# Avomos v0.4
+# Avomos v0.5.1
 
 Browser extension + backend for parsing and managing metadata from Suno AI song feed.
 
@@ -7,25 +7,37 @@ Browser extension + backend for parsing and managing metadata from Suno AI song 
 ```
 Avomos/
 ├── src/
-│   ├── Avomos.Api/          # ASP.NET Core API (C#)
-│   │   ├── Data/            # Static data files (default-riders.json)
-│   │   ├── Features/        # Chat, Riders, Tracks endpoints
-│   │   ├── Infrastructure/  # Shared DTOs, Qdrant HTTP helpers
-│   │   ├── Models/          # Qdrant document model, vectors
-│   │   ├── Pipelines/       # MediatR pipeline behaviors
-│   │   ├── Prompts/         # LLM prompts as Markdown (.md)
-│   │   └── Services/        # RiderService, EmbeddingService, LlmCache, ChatSessionService
-│   └── Avomos.Ext/          # MV3 extension (Preact + TypeScript + SCSS)
-│       ├── dist/            # Prebuilt Chrome extension (load unpacked)
-│       ├── public/          # Web-accessible resources (page-interceptor.js)
-│       ├── src/             # Components, store, API client
-│       ├── manifest.json    # Chrome manifest
+│   ├── Avomos.Api/              # ASP.NET Core API (C#)
+│   │   ├── Data/                # Static data files (default-riders.json)
+│   │   ├── Features/            # Chat, Riders, Tracks endpoints
+│   │   ├── Infrastructure/      # Shared DTOs, Qdrant HTTP helpers
+│   │   ├── Models/              # Qdrant document model, vectors
+│   │   ├── Pipelines/           # MediatR pipeline behaviors
+│   │   ├── Prompts/             # LLM prompts as Markdown (.md)
+│   │   └── Services/            # RiderService, EmbeddingService, LlmCache, ChatSessionService
+│   └── Avomos.Ext/              # MV3 extension (Preact + TypeScript + SCSS)
+│       ├── dist/                # Prebuilt Chrome extension (load unpacked)
+│       ├── scripts/             # Build helpers (zip-firefox.mjs)
+│       ├── public/              # Web-accessible resources (page-interceptor.js)
+│       ├── src/
+│       │   ├── background.ts    # Service worker — proxies API requests to bypass PNA
+│       │   ├── lib/
+│       │   │   ├── bridge.ts    # Content ↔ service worker messaging
+│       │   │   ├── api.ts       # API client (uses bridge)
+│       │   │   ├── config.ts
+│       │   │   ├── types.ts
+│       │   │   └── track-store.ts
+│       │   ├── components/
+│       │   ├── hooks/
+│       │   ├── styles/
+│       │   └── App.tsx
+│       ├── manifest.json        # Chrome manifest
 │       ├── manifest.firefox.json
-│       └── avomos-firefox.xpi  # Prebuilt Firefox extension
-├── volumes/                 # Runtime data (preserved via .gitkeep)
-│   ├── chat/                # Chat session persistence
-│   └── qdrant/             # Qdrant storage
-├── docker-compose.yml       # Qdrant + API
+│       └── avomos-firefox.xpi   # Prebuilt Firefox extension
+├── volumes/                     # Runtime data (preserved via .gitkeep)
+│   ├── chat/                    # Chat session persistence
+│   └── qdrant/                  # Qdrant storage
+├── docker-compose.yml           # Qdrant + API
 ├── docker-compose.override.yml  # Local secrets (gitignored)
 └── Dockerfile
 ```
@@ -39,6 +51,15 @@ Avomos/
 | Embeddings | OpenRouter (`nvidia/llama-nemotron-embed-vl-1b-v2:free`) |
 | Chat LLM | OpenAI-compatible (configurable via `Llm` settings) |
 | Extension | Preact, Vite, @crxjs/vite-plugin, SCSS |
+
+### Network Architecture
+
+API calls from the extension content script are proxied through a background service worker to bypass Chrome's Private Network Access (PNA) restrictions. The content script sends requests via `chrome.runtime.sendMessage` — the service worker performs the actual `fetch()` to `http://localhost:5000` and returns the response.
+
+```
+Suno feed → page-interceptor.js → content script
+  → chrome.runtime.sendMessage → service worker → fetch → API backend → Qdrant
+```
 
 ### Chat Tools
 
@@ -122,6 +143,13 @@ The extension intercepts Suno's API responses, extracts track metadata, and sync
 
 ## Changelog
 
+### v0.5.1 — Background service worker, PNA bypass, Windows build fix
+
+- **Background service worker**: API requests are now proxied through a service worker (`src/background.ts`) to bypass Chrome's Private Network Access (PNA) checks. Content script communicates via `chrome.runtime.sendMessage` — the worker performs the actual `fetch()`.
+- **Bridge module**: New `src/lib/bridge.ts` provides a unified interface for content ↔ service worker messaging.
+- **Windows build fix**: Firefox build now works on Windows via `cross-env` and a Node.js zip script (`scripts/zip-firefox.mjs`) instead of Unix-specific `FIREFOX=1` / `python3`.
+- **CORS cleanup**: Removed `Access-Control-Allow-Private-Network` middleware from `Program.cs` — no longer needed with the service worker proxy.
+
 ### v0.4.2 — Centroid coherence, detailed_style embedding, outlier highlight
 
 - **Coherence rework**: tracks compared pairwise via centroid (not vs DB). Returns `outlierTrackId`
@@ -153,6 +181,8 @@ The extension intercepts Suno's API responses, extracts track metadata, and sync
 - Embeddings are cached in `.cache/llm/embedding/` inside the container (lost on restart — temporary cache).
 - `docker-compose.override.yml` and `appsettings.*.local.json` are gitignored — keep secrets there.
 - Extension version auto-bumps patch on each `npm run build` (via `prebuild` script). Prebuilt artifacts in repo may lag behind source.
+- A background service worker is required to bypass Chrome's Private Network Access checks. The service worker is registered in the manifest and built via `vite.config.ts`. On first load, Chrome may take a few seconds to start the worker.
+- Firefox build on Windows uses `cross-env` for env vars and a Node.js script for `.xpi` packaging instead of Unix-specific `FIREFOX=1` / `python3`. `cross-env` is automatically installed via `npm install` in the extension directory.
 
 ## License
 
